@@ -1,0 +1,83 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  EXPIRED
+  DISABLED
+}
+
+enum PaymentProvider {
+  YOOKASSA
+  CRYPTOBOT
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  CANCELED
+  FAILED
+}
+
+model User {
+  id             String        @id @default(cuid())
+  telegramId     String        @unique
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  trialGrantedAt DateTime?
+
+  subscription   Subscription?
+  payments       Payment[]
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  userId            String             @unique
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // 3x-ui identity: source of truth for the VPN account.
+  xuiInboundId       Int
+  xuiClientUuid      String             @unique
+  xuiSubscriptionId  String             @unique
+
+  // Cached mirror of 3x-ui fields (expiration is still the source of truth in 3x-ui).
+  status            SubscriptionStatus  @default(ACTIVE)
+  expiresAt         DateTime?
+  enabled           Boolean             @default(true)
+  lastSyncedAt      DateTime?
+
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  @@index([expiresAt])
+  @@index([status])
+}
+
+model Payment {
+  id                 String          @id @default(cuid())
+  userId             String
+  user               User            @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  provider           PaymentProvider
+  providerPaymentId  String
+  status             PaymentStatus   @default(PENDING)
+
+  planDays           Int
+  amountMinor        Int
+  currency           String
+
+  createdAt          DateTime        @default(now())
+  paidAt             DateTime?
+
+  rawWebhook         Json?
+
+  @@unique([provider, providerPaymentId])
+  @@index([userId, createdAt])
+}
+
