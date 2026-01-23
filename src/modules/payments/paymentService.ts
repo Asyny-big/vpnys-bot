@@ -7,7 +7,7 @@ import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 import { EXTRA_DEVICE_RUB } from "../../domain/pricing";
-import { formatRuDayMonth } from "../../domain/humanDate";
+import { formatRuDateTime } from "../../domain/humanDate";
 import { formatRuDevices } from "../../domain/humanDevices";
 
 export type CreateCheckoutParams = Readonly<{
@@ -453,7 +453,7 @@ export class PaymentService {
           await this.subscriptions.ensureDeviceLimit(payment.userId, payment.targetDeviceLimit);
         }
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
-        await this.notifyTelegram(user.telegramId, `✅ Оплата прошла! VPN работает до ${formatRuDayMonth(targetExpiresAt)}`);
+        await this.notifyTelegram(user.telegramId, `✅ Оплата прошла! VPN работает до ${formatRuDateTime(targetExpiresAt)}`);
         return;
       }
 

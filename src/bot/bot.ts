@@ -8,7 +8,7 @@ import type { SubscriptionService } from "../modules/subscription/subscriptionSe
 import type { PaymentService } from "../modules/payments/paymentService";
 import { PaymentProvider } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
-import { formatRuDayMonth } from "../domain/humanDate";
+import { formatRuDateTime, formatRuDayMonth } from "../domain/humanDate";
 import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 
@@ -203,7 +203,7 @@ export function buildBot(deps: BotDeps): Bot {
           ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
           : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
       active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
-      expiresAtLabel = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
+      expiresAtLabel = active && effectiveExpiresAt ? formatRuDateTime(effectiveExpiresAt) : "";
       deviceLimit = formatDevices(state.subscription.deviceLimit);
     } catch {
       // Fallback to cached DB state if 3x-ui is temporarily unavailable.
@@ -214,7 +214,7 @@ export function buildBot(deps: BotDeps): Bot {
             ? (sub.expiresAt.getTime() > sub.paidUntil.getTime() ? sub.expiresAt : sub.paidUntil)
             : (sub.expiresAt ?? sub.paidUntil ?? undefined);
         active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && sub.enabled;
-        expiresAtLabel = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
+        expiresAtLabel = active && effectiveExpiresAt ? formatRuDateTime(effectiveExpiresAt) : "";
         deviceLimit = formatDevices(sub.deviceLimit);
       }
     }
@@ -263,7 +263,7 @@ export function buildBot(deps: BotDeps): Bot {
         : (state.expiresAt ?? sub.paidUntil ?? undefined);
 
     const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
-    const expires = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
+    const expires = active && effectiveExpiresAt ? formatRuDateTime(effectiveExpiresAt) : "";
 
     const text = [
       "💳 <b>Подписка</b>",
@@ -550,7 +550,7 @@ export function buildBot(deps: BotDeps): Bot {
 
     const extraLines: string[] = [];
     if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
-    if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDayMonth(result.expiresAt)}`);
+    if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
 
     await sendStartScreen(ctx, buildStartCaption(extraLines));
   });
@@ -587,7 +587,7 @@ export function buildBot(deps: BotDeps): Bot {
 
     await replyOrEdit(
       ctx,
-      [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDayMonth(result.paidUntil))}</b>`].join("\n"),
+      [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDateTime(result.paidUntil))}</b>`].join("\n"),
       { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) },
     );
 
