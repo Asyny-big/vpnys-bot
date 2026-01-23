@@ -28,6 +28,10 @@ export type CryptoBotCreateInvoiceResult = Readonly<{
   payUrl: string;
 }>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export class CryptoBotClient {
   private readonly baseUrl: string;
   private readonly apiToken: string;
@@ -63,18 +67,27 @@ export class CryptoBotClient {
         throw new CryptoBotError(`CryptoBot HTTP ${response.status}`, { status: response.status, details: json });
       }
 
-      if (!json?.ok) {
+      if (!isRecord(json) || json["ok"] !== true) {
         throw new CryptoBotError("CryptoBot response not ok", { details: json });
       }
 
-      const result = json.result;
+      const result = json["result"];
+      if (!isRecord(result)) {
+        throw new CryptoBotError("CryptoBot response missing result", { details: json });
+      }
+
+      const invoiceId = result["invoice_id"];
+      const payUrl = result["pay_url"];
+      if ((typeof invoiceId !== "string" && typeof invoiceId !== "number") || typeof payUrl !== "string") {
+        throw new CryptoBotError("CryptoBot response invalid result shape", { details: json });
+      }
+
       return {
-        invoiceId: String(result.invoice_id),
-        payUrl: String(result.pay_url),
+        invoiceId: String(invoiceId),
+        payUrl: String(payUrl),
       };
     } finally {
       clearTimeout(timeout);
     }
   }
 }
-

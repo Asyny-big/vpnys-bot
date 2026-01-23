@@ -33,6 +33,10 @@ export type YooKassaCreatePaymentResult = Readonly<{
   confirmationUrl?: string;
 }>;
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
 export class YooKassaClient {
   private readonly baseUrl: string;
   private readonly authHeader: string;
@@ -75,14 +79,29 @@ export class YooKassaClient {
         throw new YooKassaError(`YooKassa HTTP ${response.status}`, { status: response.status, details: json });
       }
 
+      if (!isRecord(json)) {
+        throw new YooKassaError("YooKassa response invalid JSON shape", { details: json });
+      }
+
+      const id = json["id"];
+      const status = json["status"];
+      if (typeof id !== "string" || typeof status !== "string") {
+        throw new YooKassaError("YooKassa response missing id/status", { details: json });
+      }
+
+      const confirmation = json["confirmation"];
+      const confirmationUrl =
+        isRecord(confirmation) && typeof confirmation["confirmation_url"] === "string"
+          ? String(confirmation["confirmation_url"])
+          : undefined;
+
       return {
-        id: String(json?.id),
-        status: String(json?.status),
-        confirmationUrl: json?.confirmation?.confirmation_url ? String(json.confirmation.confirmation_url) : undefined,
+        id,
+        status,
+        confirmationUrl,
       };
     } finally {
       clearTimeout(timeout);
     }
   }
 }
-
