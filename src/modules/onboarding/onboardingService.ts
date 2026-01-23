@@ -1,7 +1,7 @@
 import type { PrismaClient, User } from "@prisma/client";
-import { PaymentStatus } from "@prisma/client";
 import { addDays } from "../../utils/time";
 import { SubscriptionService } from "../subscription/subscriptionService";
+import { PaymentStatus } from "../../db/values";
 
 export type StartResult = Readonly<{
   user: User;

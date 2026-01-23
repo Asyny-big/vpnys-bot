@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
-import { SubscriptionStatus } from "@prisma/client";
 import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
+import { SubscriptionStatus } from "../db/values";
 
 type Logger = Pick<Console, "info" | "warn" | "error">;
 

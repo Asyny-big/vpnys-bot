@@ -7,3 +7,7 @@ dist
 prisma/migrations
 
 *.log
+
+# SQLite database files
+data.db
+data.db-*

@@ -7,24 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum SubscriptionStatus {
-  ACTIVE
-  EXPIRED
-  DISABLED
-}
-
-enum PaymentProvider {
-  YOOKASSA
-  CRYPTOBOT
-}
-
-enum PaymentStatus {
-  PENDING
-  SUCCEEDED
-  CANCELED
-  FAILED
-}
-
 model User {
   id             String        @id @default(cuid())
   telegramId     String        @unique
@@ -47,7 +29,8 @@ model Subscription {
   xuiSubscriptionId  String             @unique
 
   // Cached mirror of 3x-ui fields (expiration is still the source of truth in 3x-ui).
-  status            SubscriptionStatus  @default(ACTIVE)
+  // SQLite: store as string (no Prisma enum support in this project).
+  status            String              @default("ACTIVE")
   expiresAt         DateTime?
   enabled           Boolean             @default(true)
   lastSyncedAt      DateTime?
@@ -64,9 +47,11 @@ model Payment {
   userId             String
   user               User            @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  provider           PaymentProvider
+  // SQLite: store as string (no Prisma enum support in this project).
+  provider           String
   providerPaymentId  String
-  status             PaymentStatus   @default(PENDING)
+  // SQLite: store as string (no Prisma enum support in this project).
+  status             String          @default("PENDING")
 
   planDays           Int
   amountMinor        Int
@@ -75,9 +60,9 @@ model Payment {
   createdAt          DateTime        @default(now())
   paidAt             DateTime?
 
-  rawWebhook         Json?
+  // SQLite: store JSON as string (no Prisma Json support in this project).
+  rawWebhook         String?
 
   @@unique([provider, providerPaymentId])
   @@index([userId, createdAt])
 }
-

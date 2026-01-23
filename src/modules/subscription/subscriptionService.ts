@@ -1,7 +1,7 @@
 import type { PrismaClient, Subscription, User } from "@prisma/client";
-import { SubscriptionStatus } from "@prisma/client";
 import { ThreeXUiService } from "../../integrations/threeXui/threeXuiService";
 import { addDays } from "../../utils/time";
+import { SubscriptionStatus } from "../../db/values";
 
 export type SubscriptionState = Readonly<{
   subscription: Subscription;
@@ -27,18 +27,27 @@ export class SubscriptionService {
       flow: this.xuiClientFlow,
     });
 
-    return await this.prisma.subscription.create({
-      data: {
-        userId: user.id,
-        xuiInboundId: this.xuiInboundId,
-        xuiClientUuid: client.uuid,
-        xuiSubscriptionId: client.subscriptionId,
-        enabled: client.enabled,
-        expiresAt: client.expiresAt,
-        lastSyncedAt: new Date(),
-        status: client.expiresAt && client.expiresAt.getTime() <= Date.now() ? SubscriptionStatus.EXPIRED : SubscriptionStatus.ACTIVE,
-      },
-    });
+    try {
+      return await this.prisma.subscription.create({
+        data: {
+          userId: user.id,
+          xuiInboundId: this.xuiInboundId,
+          xuiClientUuid: client.uuid,
+          xuiSubscriptionId: client.subscriptionId,
+          enabled: client.enabled,
+          expiresAt: client.expiresAt,
+          lastSyncedAt: new Date(),
+          status: client.expiresAt && client.expiresAt.getTime() <= Date.now() ? SubscriptionStatus.EXPIRED : SubscriptionStatus.ACTIVE,
+        },
+      });
+    } catch (e: any) {
+      // Race-safe: concurrent /start may attempt to create the same row; unique constraints will reject one.
+      if (e?.code === "P2002") {
+        const reread = await this.prisma.subscription.findUnique({ where: { userId: user.id } });
+        if (reread) return reread;
+      }
+      throw e;
+    }
   }
 
   async syncFromXui(user: User): Promise<SubscriptionState> {

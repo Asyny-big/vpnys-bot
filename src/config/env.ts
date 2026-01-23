@@ -91,6 +91,11 @@ export function loadEnv(): Env {
   const xuiBaseUrl = ensureUrl("XUI_BASE_URL", required("XUI_BASE_URL"));
   ensureXuiLocalhost(xuiBaseUrl);
 
+  const databaseUrl = required("DATABASE_URL");
+  if (databaseUrl !== "file:./data.db") {
+    throw new Error(`Only SQLite is supported. Set DATABASE_URL=file:./data.db (got: ${databaseUrl})`);
+  }
+
   return {
     nodeEnv: nodeEnvRaw,
     logLevel,
@@ -98,7 +103,7 @@ export function loadEnv(): Env {
     appHost: process.env.APP_HOST ?? "0.0.0.0",
     appPort: asInt("APP_PORT", process.env.APP_PORT ?? "3000"),
 
-    databaseUrl: required("DATABASE_URL"),
+    databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
 
     publicPanelBaseUrl: ensureUrl("PUBLIC_PANEL_BASE_URL", required("PUBLIC_PANEL_BASE_URL")),

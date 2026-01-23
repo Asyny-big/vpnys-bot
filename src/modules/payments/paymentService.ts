@@ -1,9 +1,9 @@
-import type { PaymentProvider, PrismaClient, User } from "@prisma/client";
-import { PaymentStatus } from "@prisma/client";
+import type { PrismaClient, User } from "@prisma/client";
 import { SubscriptionService } from "../subscription/subscriptionService";
 import { YooKassaClient } from "../../integrations/yookassa/yooKassaClient";
 import { CryptoBotClient } from "../../integrations/cryptobot/cryptoBotClient";
 import { randomUUID } from "node:crypto";
+import { PaymentProvider, PaymentStatus } from "../../db/values";
 
 export type CreateCheckoutParams = Readonly<{
   telegramId: string;
@@ -36,11 +36,21 @@ export class PaymentService {
     return user;
   }
 
+  private toJsonString(value: unknown): string | null {
+    if (value === null || value === undefined) return null;
+    if (typeof value === "string") return value;
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     await this.subscriptions.ensureForUser(user);
 
-    if (params.provider === "YOOKASSA") {
+    if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
       if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
 
@@ -50,7 +60,7 @@ export class PaymentService {
       const payment = await this.prisma.payment.create({
         data: {
           userId: user.id,
-          provider: "YOOKASSA",
+          provider: PaymentProvider.YOOKASSA,
           providerPaymentId: `pending_${randomUUID()}`, // overwritten after provider response
           planDays: params.planDays,
           amountMinor,
@@ -76,7 +86,7 @@ export class PaymentService {
       return { payUrl: created.confirmationUrl, providerPaymentId: created.id };
     }
 
-    if (params.provider === "CRYPTOBOT") {
+    if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
       const amount = this.deps.cryptobotAmountByDays[params.planDays];
       if (!amount) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_AMOUNT is not configured`);
@@ -84,7 +94,7 @@ export class PaymentService {
       const payment = await this.prisma.payment.create({
         data: {
           userId: user.id,
-          provider: "CRYPTOBOT",
+          provider: PaymentProvider.CRYPTOBOT,
           providerPaymentId: `pending_${randomUUID()}`,
           planDays: params.planDays,
           amountMinor: 0,
@@ -121,16 +131,16 @@ export class PaymentService {
 
     const payment =
       (await this.prisma.payment.findFirst({
-        where: { provider: "YOOKASSA", providerPaymentId: paymentId },
+        where: { provider: PaymentProvider.YOOKASSA, providerPaymentId: paymentId },
       })) ??
       (typeof metadataPaymentId === "string"
-        ? await this.prisma.payment.findFirst({ where: { id: metadataPaymentId, provider: "YOOKASSA" } })
+        ? await this.prisma.payment.findFirst({ where: { id: metadataPaymentId, provider: PaymentProvider.YOOKASSA } })
         : null);
     if (!payment) return;
 
     const updated = await this.prisma.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: event },
+      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: this.toJsonString(event) },
     });
     if (updated.count === 0) return;
 
@@ -160,14 +170,16 @@ export class PaymentService {
 
     const payment =
       (await this.prisma.payment.findFirst({
-        where: { provider: "CRYPTOBOT", providerPaymentId: String(invoiceId) },
+        where: { provider: PaymentProvider.CRYPTOBOT, providerPaymentId: String(invoiceId) },
       })) ??
-      (metadataPaymentId ? await this.prisma.payment.findFirst({ where: { id: metadataPaymentId, provider: "CRYPTOBOT" } }) : null);
+      (metadataPaymentId
+        ? await this.prisma.payment.findFirst({ where: { id: metadataPaymentId, provider: PaymentProvider.CRYPTOBOT } })
+        : null);
     if (!payment) return;
 
     const updated = await this.prisma.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: event },
+      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: this.toJsonString(event) },
     });
     if (updated.count === 0) return;
 
