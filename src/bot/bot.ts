@@ -86,6 +86,7 @@ export function buildBot(deps: BotDeps): Bot {
   const inflightTtlMs = 30_000;
   const startPhotoPath = path.join(process.cwd(), "imag", "lis.png");
   let startPhotoFileId: string | undefined;
+  type CheckoutFlow = "buy" | "ext";
 
   const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
     const opts = { caption, reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } };
@@ -193,10 +194,9 @@ export function buildBot(deps: BotDeps): Bot {
       .join("\n");
 
     const subUrl = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
-    const kb = new InlineKeyboard()
-      .url("🚀 Подключить VPN", subUrl)
-      .row()
-      .text("📄 Инструкция", "nav:guide")
+    const kb = new InlineKeyboard().url("🚀 Подключить VPN", subUrl).row();
+    if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
+    kb.text("📄 Инструкция", "nav:guide")
       .row()
       .text("🏠 Главное меню", "nav:cabinet")
       .row()
@@ -269,7 +269,7 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
-  const showBuyConfig = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
+  const showBuyConfig = async (ctx: any, flow: CheckoutFlow, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
 
@@ -284,8 +284,11 @@ export function buildBot(deps: BotDeps): Bot {
     const chosenDevices = quote.selectedDeviceLimit;
     const total = formatRubMinor(quote.totalRubMinor);
 
+    const title = flow === "ext" ? "🔄 Продлеваем подписку" : "🦊 Оформляем подписку";
+    const payLabel = flow === "ext" ? `Продлить за ${total}` : `Оплатить ${total}`;
+
     const text = [
-      "🦊 Оформляем подписку",
+      title,
       "",
       "Сколько устройств подключаем?",
       `Выбрано: <b>${escapeHtml(formatDevices(chosenDevices))}</b>`,
@@ -295,29 +298,29 @@ export function buildBot(deps: BotDeps): Bot {
     ].join("\n");
 
     const kb = new InlineKeyboard()
-      .text("➖", `buy:dev:dec:${planDays}:${chosenDevices}`)
-      .text(`${chosenDevices}`, `buy:dev:noop:${planDays}:${chosenDevices}`)
-      .text("➕", `buy:dev:inc:${planDays}:${chosenDevices}`)
+      .text("➖", `${flow}:dev:dec:${planDays}:${chosenDevices}`)
+      .text(`${chosenDevices}`, `${flow}:dev:noop:${planDays}:${chosenDevices}`)
+      .text("➕", `${flow}:dev:inc:${planDays}:${chosenDevices}`)
       .row();
 
     for (let i = MIN_DEVICE_LIMIT; i <= MAX_DEVICE_LIMIT; i++) {
-      kb.text(`${i}`, `buy:cfg:${planDays}:${i}`);
+      kb.text(`${i}`, `${flow}:cfg:${planDays}:${i}`);
       if (i % 6 === 0) kb.row();
     }
 
     kb.row()
-      .text("30 дней", `buy:cfg:30:${chosenDevices}`)
-      .text("90 дней", `buy:cfg:90:${chosenDevices}`)
-      .text("180 дней", `buy:cfg:180:${chosenDevices}`);
+      .text("30 дней", `${flow}:cfg:30:${chosenDevices}`)
+      .text("90 дней", `${flow}:cfg:90:${chosenDevices}`)
+      .text("180 дней", `${flow}:cfg:180:${chosenDevices}`);
 
-    kb.row().text(`Оплатить ${total}`, `buy:pay:${planDays}:${chosenDevices}`);
+    kb.row().text(payLabel, `${flow}:pay:${planDays}:${chosenDevices}`);
     kb.row().text("🏠 Главное меню", "nav:cabinet");
     kb.row().add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
-  const showBuyMethod = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
+  const showBuyMethod = async (ctx: any, flow: CheckoutFlow, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
 
@@ -334,10 +337,10 @@ export function buildBot(deps: BotDeps): Bot {
     const text = ["Выбери, как оплачиваем 💰", "", `Сумма: <b>${escapeHtml(total)}</b>`, `Срок: <b>${planDays} дней</b>`, `Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`].join("\n");
 
     const kb = new InlineKeyboard()
-      .text("₽ Рубли", `buy:do:yoo:${planDays}:${quote.selectedDeviceLimit}`)
-      .text("$ Крипта", `buy:do:cb:${planDays}:${quote.selectedDeviceLimit}`)
+      .text("₽ Рубли", `${flow}:do:yoo:${planDays}:${quote.selectedDeviceLimit}`)
+      .text("$ Крипта", `${flow}:do:cb:${planDays}:${quote.selectedDeviceLimit}`)
       .row()
-      .text("🔙 Назад", `buy:cfg:${planDays}:${quote.selectedDeviceLimit}`)
+      .text("🔙 Назад", `${flow}:cfg:${planDays}:${quote.selectedDeviceLimit}`)
       .row()
       .text("🏠 Главное меню", "nav:cabinet")
       .row()
