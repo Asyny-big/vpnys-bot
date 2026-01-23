@@ -7,6 +7,8 @@ import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 import { EXTRA_DEVICE_RUB_MINOR } from "../../domain/pricing";
+import { formatRuDayMonth } from "../../domain/humanDate";
+import { formatRuDevices } from "../../domain/humanDevices";
 
 export type CreateCheckoutParams = Readonly<{
   telegramId: string;
@@ -192,7 +194,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRubMinor: amountMinor,
-        description: `VPNYS: подписка ${params.planDays} дней`,
+        description: `ЛисVPN — подписка на ${params.planDays} дней`,
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: String(params.planDays) },
@@ -229,7 +231,7 @@ export class PaymentService {
       const created = await this.deps.cryptobot.createInvoice({
         amount,
         asset: this.deps.cryptobotAsset,
-        description: `VPNYS: подписка ${params.planDays} дней`,
+        description: `ЛисVPN — подписка на ${params.planDays} дней`,
         payload: JSON.stringify({ userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: params.planDays }),
       });
 
@@ -278,7 +280,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRubMinor: quoted.totalRubMinor,
-        description: `VPNYS: подписка ${params.planDays} дней · устройств: ${targetDeviceLimit}`,
+        description: `ЛисVPN — подписка на ${params.planDays} дней, ${formatRuDevices(targetDeviceLimit)}`,
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: {
@@ -318,7 +320,7 @@ export class PaymentService {
       const created = await this.deps.cryptobot.createInvoice({
         amount,
         asset: this.deps.cryptobotAsset,
-        description: `VPNYS: подписка ${params.planDays} дней · устройств: ${targetDeviceLimit}`,
+        description: `ЛисVPN — подписка на ${params.planDays} дней, ${formatRuDevices(targetDeviceLimit)}`,
         payload: JSON.stringify({
           userId: user.id,
           telegramId: user.telegramId,
@@ -362,7 +364,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRubMinor: EXTRA_DEVICE_RUB_MINOR,
-        description: "VPNYS: дополнительное устройство (+1)",
+        description: "ЛисVPN — ещё одно устройство",
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
@@ -399,7 +401,7 @@ export class PaymentService {
       const created = await this.deps.cryptobot.createInvoice({
         amount,
         asset: this.deps.cryptobotAsset,
-        description: "VPNYS: дополнительное устройство (+1)",
+        description: "ЛисVPN — ещё одно устройство",
         payload: JSON.stringify({ userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: 1 }),
       });
 
@@ -429,7 +431,7 @@ export class PaymentService {
       const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
       if (!user) return;
 
-    if (payment.type === PaymentType.SUBSCRIPTION) {
+      if (payment.type === PaymentType.SUBSCRIPTION) {
         let targetExpiresAt = payment.targetExpiresAt ?? undefined;
         if (!targetExpiresAt) {
           const state = await this.subscriptions.syncFromXui(user);
@@ -451,7 +453,7 @@ export class PaymentService {
           await this.subscriptions.ensureDeviceLimit(payment.userId, payment.targetDeviceLimit);
         }
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
-        await this.notifyTelegram(user.telegramId, `✅ Оплата получена. Подписка продлена до ${targetExpiresAt.toISOString()}`);
+        await this.notifyTelegram(user.telegramId, `✅ Оплата прошла! VPN работает до ${formatRuDayMonth(targetExpiresAt)}`);
         return;
       }
 
@@ -482,7 +484,7 @@ export class PaymentService {
 
         const ensured = await this.subscriptions.ensureDeviceLimit(payment.userId, targetDeviceLimit);
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
-        await this.notifyTelegram(user.telegramId, `✅ Устройство добавлено. Лимит устройств: ${ensured.deviceLimit}`);
+        await this.notifyTelegram(user.telegramId, `✅ Готово! Теперь можно подключить ${formatRuDevices(ensured.deviceLimit)}.`);
         return;
       }
     } finally {

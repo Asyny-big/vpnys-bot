@@ -1,4 +1,4 @@
-import { MAX_DEVICE_LIMIT } from "../domain/deviceLimits";
+import { formatRuDevices } from "../domain/humanDevices";
 
 export function escapeHtml(input: string): string {
   return input
@@ -16,5 +16,5 @@ export function formatRubMinor(amountMinor: number): string {
 }
 
 export function formatDevices(current: number): string {
-  return `${current} из ${MAX_DEVICE_LIMIT}`;
+  return formatRuDevices(current);
 }
