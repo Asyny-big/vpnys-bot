@@ -10,6 +10,7 @@ type Env = Readonly<{
   databaseUrl: string;
   telegramBotToken: string;
   adminUsername?: string;
+  adminUserIds: ReadonlySet<string>;
 
   // What users receive in /sub/<subscription_id> URL (can be public host / reverse proxy).
   publicPanelBaseUrl: string;
@@ -50,6 +51,15 @@ function required(name: string): string {
 function optional(name: string): string | undefined {
   const value = process.env[name];
   return value?.length ? value : undefined;
+}
+
+function parseIdSet(value: string | undefined): ReadonlySet<string> {
+  if (!value?.trim().length) return new Set<string>();
+  const ids = value
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+  return new Set(ids);
 }
 
 function asInt(name: string, value: string): number {
@@ -108,6 +118,7 @@ export function loadEnv(): Env {
     databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     adminUsername: optional("ADMIN_USERNAME"),
+    adminUserIds: parseIdSet(optional("ADMIN_USER_IDS")),
 
     publicPanelBaseUrl: ensureUrl("PUBLIC_PANEL_BASE_URL", required("PUBLIC_PANEL_BASE_URL")),
 

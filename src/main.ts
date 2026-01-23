@@ -12,6 +12,7 @@ import { CryptoBotClient } from "./integrations/cryptobot/cryptoBotClient";
 import { PaymentService } from "./modules/payments/paymentService";
 import { registerWebhooks } from "./http/webhooks";
 import { startSubscriptionWorker } from "./worker/subscriptionWorker";
+import { PromoService } from "./modules/promo/promoService";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -52,14 +53,18 @@ async function main(): Promise<void> {
     cryptobotDeviceSlotAmount: env.cryptobotDeviceSlotAmount,
   });
 
+  const promos = new PromoService(prisma);
+
   const bot = buildBot({
     botToken: env.telegramBotToken,
     prisma,
     onboarding,
     subscriptions,
     payments,
+    promos,
     publicPanelBaseUrl: env.publicPanelBaseUrl,
     adminUsername: env.adminUsername,
+    adminUserIds: env.adminUserIds,
   });
 
   const app = Fastify({

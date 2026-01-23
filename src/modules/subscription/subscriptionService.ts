@@ -80,8 +80,27 @@ export class SubscriptionService {
       return { subscription: updated, expiresAt: repaired.expiresAt, enabled: repaired.enabled };
     }
 
-    const expiresAt = client.expiresAt;
-    const enabled = client.enabled;
+    let expiresAt = client.expiresAt;
+    let enabled = client.enabled;
+
+    const now = new Date();
+    const paidUntil = subscription.paidUntil;
+    if (paidUntil && paidUntil.getTime() > now.getTime()) {
+      const needsExtend = !expiresAt || expiresAt.getTime() < paidUntil.getTime();
+      if (needsExtend) {
+        await this.xui.setExpiryAndEnable({
+          inboundId: subscription.xuiInboundId,
+          uuid: subscription.xuiClientUuid,
+          subscriptionId: subscription.xuiSubscriptionId,
+          expiresAt: paidUntil,
+          enabled: true,
+          deviceLimit: subscription.deviceLimit,
+        });
+        expiresAt = paidUntil;
+        enabled = true;
+      }
+    }
+
     if (typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
       await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { deviceLimit: subscription.deviceLimit });
     }
@@ -184,7 +203,9 @@ export class SubscriptionService {
   async extend(params: { user: User; days: number }): Promise<Subscription> {
     const state = await this.syncFromXui(params.user);
     const now = new Date();
-    const base = state.expiresAt && state.expiresAt.getTime() > now.getTime() ? state.expiresAt : now;
+    const current = state.expiresAt && state.expiresAt.getTime() > now.getTime() ? state.expiresAt : now;
+    const paidUntil = state.subscription.paidUntil && state.subscription.paidUntil.getTime() > now.getTime() ? state.subscription.paidUntil : now;
+    const base = paidUntil.getTime() > current.getTime() ? paidUntil : current;
     const nextExpiresAt = addDays(base, params.days);
     return await this.setExpiryAndEnable({ user: params.user, expiresAt: nextExpiresAt, enable: true });
   }

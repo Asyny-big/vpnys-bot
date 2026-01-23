@@ -436,7 +436,9 @@ export class PaymentService {
         if (!targetExpiresAt) {
           const state = await this.subscriptions.syncFromXui(user);
           const now = new Date();
-          const base = state.expiresAt && state.expiresAt.getTime() > now.getTime() ? state.expiresAt : now;
+          const current = state.expiresAt && state.expiresAt.getTime() > now.getTime() ? state.expiresAt : now;
+          const paidUntil = state.subscription.paidUntil && state.subscription.paidUntil.getTime() > now.getTime() ? state.subscription.paidUntil : now;
+          const base = paidUntil.getTime() > current.getTime() ? paidUntil : current;
           const candidate = addDays(base, payment.planDays);
 
           await this.prisma.payment.updateMany({
@@ -449,6 +451,10 @@ export class PaymentService {
         }
 
         await this.subscriptions.setExpiryAndEnable({ user, expiresAt: targetExpiresAt, enable: true });
+        await this.prisma.subscription.updateMany({
+          where: { userId: user.id },
+          data: { paidUntil: targetExpiresAt },
+        });
         if (typeof payment.targetDeviceLimit === "number") {
           await this.subscriptions.ensureDeviceLimit(payment.userId, payment.targetDeviceLimit);
         }

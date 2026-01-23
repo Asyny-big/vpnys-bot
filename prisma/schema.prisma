@@ -16,6 +16,7 @@ model User {
 
   subscription   Subscription?
   payments       Payment[]
+  promoUses      PromoCodeUse[]
 }
 
 model Subscription {
@@ -34,6 +35,8 @@ model Subscription {
   // Source of truth for per-user device limit (mirrored to 3x-ui client.limitIp).
   deviceLimit       Int                 @default(1)
   expiresAt         DateTime?
+  // Source of truth for "paid until" including promo extensions.
+  paidUntil         DateTime?
   enabled           Boolean             @default(true)
   lastSyncedAt      DateTime?
 
@@ -41,6 +44,7 @@ model Subscription {
   updatedAt         DateTime           @updatedAt
 
   @@index([expiresAt])
+  @@index([paidUntil])
   @@index([status])
 }
 
@@ -79,4 +83,29 @@ model Payment {
 
   @@unique([provider, providerPaymentId])
   @@index([userId, createdAt])
+}
+
+model PromoCode {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  bonusDays Int
+  maxUses   Int?
+  usedCount Int      @default(0)
+  expiresAt DateTime?
+  createdAt DateTime @default(now())
+
+  uses      PromoCodeUse[]
+}
+
+model PromoCodeUse {
+  id      String    @id @default(cuid())
+  promoId String
+  userId  String
+  usedAt  DateTime  @default(now())
+
+  promo   PromoCode @relation(fields: [promoId], references: [id], onDelete: Cascade)
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([promoId, userId])
+  @@index([userId, usedAt])
 }

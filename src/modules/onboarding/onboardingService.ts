@@ -33,8 +33,12 @@ export class OnboardingService {
     });
 
     const now = new Date();
+    const effectiveExpiresAt =
+      state.expiresAt && state.subscription.paidUntil
+        ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
+        : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
     const canGrantTrial =
-      !user.trialGrantedAt && !hasSucceededPayment && (!state.expiresAt || state.expiresAt.getTime() <= now.getTime());
+      !user.trialGrantedAt && !hasSucceededPayment && (!effectiveExpiresAt || effectiveExpiresAt.getTime() <= now.getTime());
 
     let isTrialGrantedNow = false;
     let finalState = state;
@@ -60,11 +64,16 @@ export class OnboardingService {
       }
     }
 
+    const returnExpiresAt =
+      finalState.expiresAt && finalState.subscription.paidUntil
+        ? (finalState.expiresAt.getTime() > finalState.subscription.paidUntil.getTime() ? finalState.expiresAt : finalState.subscription.paidUntil)
+        : (finalState.expiresAt ?? finalState.subscription.paidUntil ?? undefined);
+
     return {
       user,
       isTrialGrantedNow,
       subscriptionUrl: this.subscriptions.subscriptionUrl(this.publicPanelBaseUrl, finalState.subscription.xuiSubscriptionId),
-      expiresAt: finalState.expiresAt,
+      expiresAt: returnExpiresAt,
       enabled: finalState.enabled,
     };
   }

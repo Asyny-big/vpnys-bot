@@ -54,6 +54,7 @@ export function startSubscriptionWorker(deps: {
               { enabled: true },
               { expiresAt: { lte: now } },
               { expiresAt: null },
+              { paidUntil: { gt: now } },
             ],
           },
           ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
@@ -62,7 +63,9 @@ export function startSubscriptionWorker(deps: {
             id: true,
             xuiInboundId: true,
             xuiClientUuid: true,
+            xuiSubscriptionId: true,
             deviceLimit: true,
+            paidUntil: true,
           },
           take: batchSize,
         });
@@ -91,11 +94,34 @@ export function startSubscriptionWorker(deps: {
               return;
             }
 
-            const expiresAt = client.expiresAt;
-            const expired = !!expiresAt && expiresAt.getTime() <= Date.now();
+            let expiresAt = client.expiresAt;
+            let enabled = client.enabled;
+
+            if (sub.paidUntil && sub.paidUntil.getTime() > now.getTime()) {
+              const needsExtend = !expiresAt || expiresAt.getTime() < sub.paidUntil.getTime();
+              if (needsExtend) {
+                await deps.xui.setExpiryAndEnable({
+                  inboundId: sub.xuiInboundId,
+                  uuid: sub.xuiClientUuid,
+                  subscriptionId: sub.xuiSubscriptionId,
+                  expiresAt: sub.paidUntil,
+                  enabled: true,
+                  deviceLimit: sub.deviceLimit,
+                });
+                expiresAt = sub.paidUntil;
+                enabled = true;
+              }
+            }
+
+            const effectiveExpiresAt =
+              expiresAt && sub.paidUntil
+                ? (expiresAt.getTime() > sub.paidUntil.getTime() ? expiresAt : sub.paidUntil)
+                : (expiresAt ?? sub.paidUntil ?? undefined);
+
+            const expired = !!effectiveExpiresAt && effectiveExpiresAt.getTime() <= now.getTime();
 
             if (expired) {
-              if (client.enabled) {
+              if (enabled) {
                 await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
               }
               await deps.prisma.subscription.update({
@@ -103,7 +129,7 @@ export function startSubscriptionWorker(deps: {
                 data: {
                   enabled: false,
                   status: SubscriptionStatus.EXPIRED,
-                  expiresAt: expiresAt ?? null,
+                  expiresAt: effectiveExpiresAt ?? null,
                   lastSyncedAt: new Date(),
                 },
               });
@@ -113,9 +139,9 @@ export function startSubscriptionWorker(deps: {
             await deps.prisma.subscription.update({
               where: { id: sub.id },
               data: {
-                enabled: client.enabled,
-                status: client.enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
-                expiresAt: expiresAt ?? null,
+                enabled,
+                status: enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
+                expiresAt: effectiveExpiresAt ?? null,
                 lastSyncedAt: new Date(),
               },
             });

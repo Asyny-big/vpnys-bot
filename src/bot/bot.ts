@@ -10,6 +10,7 @@ import { PaymentProvider } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
 import { formatRuDayMonth } from "../domain/humanDate";
 import { escapeHtml, formatDevices, formatRubMinor } from "./ui";
+import type { PromoService } from "../modules/promo/promoService";
 
 export type BotDeps = Readonly<{
   botToken: string;
@@ -17,11 +18,19 @@ export type BotDeps = Readonly<{
   onboarding: OnboardingService;
   subscriptions: SubscriptionService;
   payments: PaymentService;
+  promos: PromoService;
   publicPanelBaseUrl: string;
   adminUsername?: string;
+  adminUserIds: ReadonlySet<string>;
 }>;
 
 type ReplyOpts = any;
+
+export enum CheckoutFlow {
+  BUY = "buy",
+  EXTEND = "ext",
+  PROMO = "promo",
+}
 
 type Support = Readonly<{
   url?: string;
@@ -86,7 +95,25 @@ export function buildBot(deps: BotDeps): Bot {
   const inflightTtlMs = 30_000;
   const startPhotoPath = path.join(process.cwd(), "imag", "lis.png");
   let startPhotoFileId: string | undefined;
-  type CheckoutFlow = "buy" | "ext";
+
+  const isAdmin = (ctx: any): boolean => {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return false;
+    return deps.adminUserIds.has(String(telegramId));
+  };
+
+  const parseExpiresAt = (value: string): Date | null => {
+    const trimmed = value.trim();
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+    const date = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
+    return date;
+  };
 
   const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
     const opts = { caption, reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } };
@@ -164,8 +191,12 @@ export function buildBot(deps: BotDeps): Bot {
     let statusLine = "";
     try {
       const state = await deps.subscriptions.syncFromXui(user);
-      const active = !!state.expiresAt && state.expiresAt.getTime() > Date.now() && state.enabled;
-      if (active && state.expiresAt) statusLine = `✅ VPN работает до ${formatRuDayMonth(state.expiresAt)}`;
+      const effectiveExpiresAt =
+        state.expiresAt && state.subscription.paidUntil
+          ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
+          : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
+      const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
+      if (active && effectiveExpiresAt) statusLine = `✅ VPN работает до ${formatRuDayMonth(effectiveExpiresAt)}`;
     } catch {
       // ignore
     }
@@ -181,8 +212,13 @@ export function buildBot(deps: BotDeps): Bot {
     const state = await deps.subscriptions.syncFromXui(user);
     const sub = state.subscription;
 
-    const active = !!state.expiresAt && state.expiresAt.getTime() > Date.now() && state.enabled;
-    const expires = active && state.expiresAt ? formatRuDayMonth(state.expiresAt) : "";
+    const effectiveExpiresAt =
+      state.expiresAt && sub.paidUntil
+        ? (state.expiresAt.getTime() > sub.paidUntil.getTime() ? state.expiresAt : sub.paidUntil)
+        : (state.expiresAt ?? sub.paidUntil ?? undefined);
+
+    const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
+    const expires = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
 
     const text = [
       "💳 <b>Подписка</b>",
@@ -284,8 +320,8 @@ export function buildBot(deps: BotDeps): Bot {
     const chosenDevices = quote.selectedDeviceLimit;
     const total = formatRubMinor(quote.totalRubMinor);
 
-    const title = flow === "ext" ? "🔄 Продлеваем подписку" : "🦊 Оформляем подписку";
-    const payLabel = flow === "ext" ? `Продлить за ${total}` : `Оплатить ${total}`;
+    const title = flow === CheckoutFlow.EXTEND ? "🔄 Продлеваем подписку" : "🦊 Оформляем подписку";
+    const payLabel = flow === CheckoutFlow.EXTEND ? `Продлить за ${total}` : `Оплатить ${total}`;
 
     const text = [
       title,
@@ -347,6 +383,34 @@ export function buildBot(deps: BotDeps): Bot {
       .add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const startSubscriptionCheckout = async (ctx: any, flow: CheckoutFlow, providerRaw: "yoo" | "cb", planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
+    if (!ctx.from?.id) return;
+
+    const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
+
+    const lockKey = `${flow}:do:${ctx.from.id}:${providerRaw}:${planDays}:${deviceLimit}:${ctx.callbackQuery?.message?.message_id ?? ""}`;
+    if (!lock(lockKey)) return;
+    try {
+      const created = await deps.payments.createSubscriptionCheckout({
+        telegramId: String(ctx.from.id),
+        provider,
+        planDays,
+        deviceLimit,
+      });
+
+      const text = ["Почти всё 👌", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я сам всё включу."]
+        .join("\n");
+
+      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("createSubscriptionCheckout failed", e);
+      await replyOrEdit(ctx, "Не получилось создать оплату. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
+    } finally {
+      unlock(lockKey);
+    }
   };
 
   const showGuideMenu = async (ctx: any): Promise<void> => {
@@ -421,18 +485,113 @@ export function buildBot(deps: BotDeps): Bot {
     await sendStartScreen(ctx, buildStartCaption(extraLines));
   });
 
+  bot.command("promo", async (ctx) => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    const text = ctx.message?.text ?? "";
+    const spaceIndex = text.indexOf(" ");
+    const codeRaw = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
+    if (!codeRaw.trim().length) {
+      await replyOrEdit(ctx, "Формат: /promo <code>", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+    if (result.status === "not_found") {
+      await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "already_used") {
+      await replyOrEdit(ctx, `ℹ️ Промокод уже использован: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "expired") {
+      await replyOrEdit(ctx, `❌ Промокод просрочен: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "exhausted") {
+      await replyOrEdit(ctx, `❌ Лимит использований исчерпан: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    await replyOrEdit(
+      ctx,
+      [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDayMonth(result.paidUntil))}</b>`].join("\n"),
+      { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) },
+    );
+  });
+
+  bot.command("addpromo", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Команда доступна только администратору");
+      return;
+    }
+
+    const text = ctx.message?.text ?? "";
+    const args = text.trim().split(/\s+/).slice(1);
+
+    const codeRaw = args[0] ?? "";
+    const daysRaw = args[1] ?? "";
+    const maxUsesRaw = args[2];
+    const expiresAtRaw = args[3];
+
+    if (!codeRaw.trim().length || !daysRaw.trim().length || args.length < 2 || args.length > 4) {
+      await replyOrEdit(ctx, "Формат: /addpromo <code> <days> [maxUses] [expiresAt]\nПример: /addpromo PARTNER2026 30 50 2026-03-01");
+      return;
+    }
+
+    const bonusDays = Number.parseInt(daysRaw, 10);
+    if (!Number.isFinite(bonusDays) || bonusDays <= 0) {
+      await replyOrEdit(ctx, "❌ days должен быть целым числом > 0");
+      return;
+    }
+
+    let maxUses: number | null | undefined;
+    if (maxUsesRaw !== undefined) {
+      const parsed = Number.parseInt(maxUsesRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        await replyOrEdit(ctx, "❌ maxUses должен быть целым числом > 0");
+        return;
+      }
+      maxUses = parsed;
+    }
+
+    let expiresAt: Date | null | undefined;
+    if (expiresAtRaw !== undefined) {
+      const parsed = parseExpiresAt(expiresAtRaw);
+      if (!parsed) {
+        await replyOrEdit(ctx, "❌ expiresAt должен быть в формате YYYY-MM-DD (например, 2026-03-01)");
+        return;
+      }
+      expiresAt = parsed;
+    }
+
+    const created = await deps.promos.addPromo({ code: codeRaw, bonusDays, maxUses, expiresAt });
+    if (!created.ok) {
+      await replyOrEdit(ctx, "❌ Такой промокод уже существует");
+      return;
+    }
+
+    await replyOrEdit(ctx, `✅ Промокод добавлен: ${created.promo.code}, ${created.promo.bonusDays} дней`);
+  });
+
   bot.hears("🚀 Подключить VPN", async (ctx) => {
     const required = await requireUser(ctx);
     if (!required) return;
 
     const state = await deps.subscriptions.syncFromXui(required.user);
-    const active = !!state.expiresAt && state.expiresAt.getTime() > Date.now() && state.enabled;
+    const effectiveExpiresAt =
+      state.expiresAt && state.subscription.paidUntil
+        ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
+        : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
+    const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
     if (active) {
       await showMySubscription(ctx);
       return;
     }
 
-    await showBuyConfig(ctx, 30, MIN_DEVICE_LIMIT);
+    await showBuyConfig(ctx, CheckoutFlow.BUY, 30, MIN_DEVICE_LIMIT);
   });
   bot.hears("📱 Устройства", showDevices);
   bot.hears("💳 Подписка", showMySubscription);
@@ -448,7 +607,7 @@ export function buildBot(deps: BotDeps): Bot {
   });
   bot.callbackQuery("nav:buy", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showBuyConfig(ctx, 30, MIN_DEVICE_LIMIT);
+    await showBuyConfig(ctx, CheckoutFlow.BUY, 30, MIN_DEVICE_LIMIT);
   });
   bot.callbackQuery("nav:devices", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -467,7 +626,7 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     const days = Number(ctx.match[1]) as 30 | 90 | 180;
     const devices = Number(ctx.match[2]);
-    await showBuyConfig(ctx, days, devices);
+    await showBuyConfig(ctx, CheckoutFlow.BUY, days, devices);
   });
 
   bot.callbackQuery(/^buy:dev:(inc|dec|noop):(30|90|180):(\d+)$/, async (ctx) => {
@@ -477,51 +636,69 @@ export function buildBot(deps: BotDeps): Bot {
     const devices = Number(ctx.match[3]);
 
     if (action === "noop") {
-      await showBuyConfig(ctx, days, devices);
+      await showBuyConfig(ctx, CheckoutFlow.BUY, days, devices);
       return;
     }
 
     const next = action === "inc" ? devices + 1 : devices - 1;
-    await showBuyConfig(ctx, days, next);
+    await showBuyConfig(ctx, CheckoutFlow.BUY, days, next);
   });
 
   bot.callbackQuery(/^buy:pay:(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const days = Number(ctx.match[1]) as 30 | 90 | 180;
     const devices = Number(ctx.match[2]);
-    await showBuyMethod(ctx, days, devices);
+    await showBuyMethod(ctx, CheckoutFlow.BUY, days, devices);
   });
 
   bot.callbackQuery(/^buy:do:(yoo|cb):(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    if (!ctx.from?.id) return;
-
-    const providerRaw = ctx.match[1];
-    const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
+    const providerRaw = ctx.match[1] as "yoo" | "cb";
     const planDays = Number(ctx.match[2]) as 30 | 90 | 180;
     const deviceLimit = Number(ctx.match[3]);
+    await startSubscriptionCheckout(ctx, CheckoutFlow.BUY, providerRaw, planDays, deviceLimit);
+  });
 
-    const lockKey = `buy:do:${ctx.from.id}:${providerRaw}:${planDays}:${deviceLimit}:${ctx.callbackQuery?.message?.message_id ?? ""}`;
-    if (!lock(lockKey)) return;
-    try {
-      const created = await deps.payments.createSubscriptionCheckout({
-        telegramId: String(ctx.from.id),
-        provider,
-        planDays,
-        deviceLimit,
-      });
+  bot.callbackQuery("ext:open", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showBuyConfig(ctx, CheckoutFlow.EXTEND, 30, MIN_DEVICE_LIMIT);
+  });
 
-      const text = ["Почти всё 👌", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я сам всё включу."]
-        .join("\n");
+  bot.callbackQuery(/^ext:cfg:(30|90|180):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const days = Number(ctx.match[1]) as 30 | 90 | 180;
+    const devices = Number(ctx.match[2]);
+    await showBuyConfig(ctx, CheckoutFlow.EXTEND, days, devices);
+  });
 
-      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
-    } catch (e: any) {
-      // eslint-disable-next-line no-console
-      console.error("createSubscriptionCheckout failed", e);
-      await replyOrEdit(ctx, "Не получилось создать оплату. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
-    } finally {
-      unlock(lockKey);
+  bot.callbackQuery(/^ext:dev:(inc|dec|noop):(30|90|180):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const action = ctx.match[1] as "inc" | "dec" | "noop";
+    const days = Number(ctx.match[2]) as 30 | 90 | 180;
+    const devices = Number(ctx.match[3]);
+
+    if (action === "noop") {
+      await showBuyConfig(ctx, CheckoutFlow.EXTEND, days, devices);
+      return;
     }
+
+    const next = action === "inc" ? devices + 1 : devices - 1;
+    await showBuyConfig(ctx, CheckoutFlow.EXTEND, days, next);
+  });
+
+  bot.callbackQuery(/^ext:pay:(30|90|180):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const days = Number(ctx.match[1]) as 30 | 90 | 180;
+    const devices = Number(ctx.match[2]);
+    await showBuyMethod(ctx, CheckoutFlow.EXTEND, days, devices);
+  });
+
+  bot.callbackQuery(/^ext:do:(yoo|cb):(30|90|180):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const providerRaw = ctx.match[1] as "yoo" | "cb";
+    const planDays = Number(ctx.match[2]) as 30 | 90 | 180;
+    const deviceLimit = Number(ctx.match[3]);
+    await startSubscriptionCheckout(ctx, CheckoutFlow.EXTEND, providerRaw, planDays, deviceLimit);
   });
 
   bot.callbackQuery("dev:pay", async (ctx) => {
