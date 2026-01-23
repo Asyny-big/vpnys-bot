@@ -97,7 +97,9 @@ export class PromoService {
         const subscription = await tx.subscription.findUnique({ where: { userId: params.userId } });
         if (!subscription) throw new Error("Subscription not found. Require /start first.");
 
-        const base = subscription.paidUntil && subscription.paidUntil.getTime() > now.getTime() ? subscription.paidUntil : now;
+        const paidUntilBase = subscription.paidUntil && subscription.paidUntil.getTime() > now.getTime() ? subscription.paidUntil : now;
+        const expiresAtBase = subscription.expiresAt && subscription.expiresAt.getTime() > now.getTime() ? subscription.expiresAt : now;
+        const base = paidUntilBase.getTime() > expiresAtBase.getTime() ? paidUntilBase : expiresAtBase;
         const paidUntil = addDays(base, promo.bonusDays);
 
         await tx.subscription.update({ where: { id: subscription.id }, data: { paidUntil } });
@@ -116,4 +118,3 @@ export class PromoService {
     }
   }
 }
-

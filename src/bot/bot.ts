@@ -590,6 +590,9 @@ export function buildBot(deps: BotDeps): Bot {
       [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDayMonth(result.paidUntil))}</b>`].join("\n"),
       { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) },
     );
+
+    // Best-effort: propagate paidUntil to 3x-ui right away, so panel shows the new date without waiting for the worker tick.
+    await deps.subscriptions.syncFromXui(required.user).catch(() => {});
   });
 
   bot.command("addpromo", async (ctx) => {
