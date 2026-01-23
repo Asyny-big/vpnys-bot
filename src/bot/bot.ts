@@ -49,7 +49,7 @@ function supportButton(deps: BotDeps, label = "🆘 Поддержка"): Inline
 }
 
 function backToCabinetKeyboard(deps: BotDeps): InlineKeyboard {
-  return new InlineKeyboard().text("🏠 Главное меню", "nav:cabinet").row().add(supportButton(deps));
+  return new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps));
 }
 
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
@@ -167,7 +167,7 @@ export function buildBot(deps: BotDeps): Bot {
     const url = `https://t.me/${encodeURIComponent(username)}`;
     const text = [`Напиши нам сюда 👇`, url].join("\n");
 
-    const kb = new InlineKeyboard().url("🆘 Открыть чат", url).row().text("🏠 Главное меню", "nav:cabinet");
+    const kb = new InlineKeyboard().url("🆘 Открыть чат", url).row().text("🏠 Личный кабинет", "nav:cabinet");
     await replyOrEdit(ctx, text, { reply_markup: kb });
   };
 
@@ -188,20 +188,65 @@ export function buildBot(deps: BotDeps): Bot {
 
     const { user } = required;
 
-    let statusLine = "";
+    const firstName = escapeHtml(String(ctx.from?.first_name ?? "Пользователь"));
+    const username = ctx.from?.username ? `@${escapeHtml(String(ctx.from.username))}` : "";
+    const telegramId = String(ctx.from?.id ?? "");
+
+    let active = false;
+    let expiresAtLabel = "";
+    let deviceLimit = "";
+
     try {
       const state = await deps.subscriptions.syncFromXui(user);
       const effectiveExpiresAt =
         state.expiresAt && state.subscription.paidUntil
           ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
           : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
-      const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
-      if (active && effectiveExpiresAt) statusLine = `✅ VPN работает до ${formatRuDayMonth(effectiveExpiresAt)}`;
+      active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
+      expiresAtLabel = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
+      deviceLimit = formatDevices(state.subscription.deviceLimit);
     } catch {
-      // ignore
+      // Fallback to cached DB state if 3x-ui is temporarily unavailable.
+      const sub = await deps.prisma.subscription.findUnique({ where: { userId: user.id } });
+      if (sub) {
+        const effectiveExpiresAt =
+          sub.expiresAt && sub.paidUntil
+            ? (sub.expiresAt.getTime() > sub.paidUntil.getTime() ? sub.expiresAt : sub.paidUntil)
+            : (sub.expiresAt ?? sub.paidUntil ?? undefined);
+        active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && sub.enabled;
+        expiresAtLabel = active && effectiveExpiresAt ? formatRuDayMonth(effectiveExpiresAt) : "";
+        deviceLimit = formatDevices(sub.deviceLimit);
+      }
     }
 
-    await sendStartScreen(ctx, buildStartCaption(statusLine ? [statusLine] : []));
+    const statusLine = active && expiresAtLabel ? `✅ Активен до <b>${escapeHtml(expiresAtLabel)}</b>` : "🙈 Не активен";
+
+    const text = [
+      "🏠 <b>Личный кабинет</b>",
+      "",
+      "👤 <b>Профиль</b>",
+      `Имя: <b>${firstName}</b>`,
+      username ? `Username: <b>${username}</b>` : "",
+      `Telegram ID: <code>${escapeHtml(telegramId)}</code>`,
+      "",
+      `🔐 <b>VPN</b>: ${statusLine}`,
+      deviceLimit ? `📱 <b>Устройства</b>: <b>${escapeHtml(deviceLimit)}</b>` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const kb = new InlineKeyboard();
+    if (active) {
+      kb.text("🔄 Продлить", "ext:open").row();
+    } else {
+      kb.text("🚀 Подключить VPN", "nav:buy").row();
+    }
+
+    kb.text("📱 Устройства", "nav:devices").text("💳 Подписка", "nav:sub").row();
+    kb.text("🎁 Ввести промокод", "nav:promo").row();
+    kb.add(supportButton(deps, "🆘 Поддержка"));
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
   const showMySubscription = async (ctx: any): Promise<void> => {
@@ -234,7 +279,7 @@ export function buildBot(deps: BotDeps): Bot {
     if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
     kb.text("📄 Инструкция", "nav:guide")
       .row()
-      .text("🏠 Главное меню", "nav:cabinet")
+      .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
       .add(supportButton(deps, "🆘 Поддержка"));
 
@@ -268,7 +313,7 @@ export function buildBot(deps: BotDeps): Bot {
       textLines.push(`🚫 Сейчас максимум — ${MAX_DEVICE_LIMIT}.`);
     }
 
-    kb.text("🏠 Главное меню", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
+    kb.text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, textLines.join("\n"), { parse_mode: "HTML", reply_markup: kb });
   };
@@ -305,7 +350,7 @@ export function buildBot(deps: BotDeps): Bot {
     kb.row()
       .text("🔙 Назад", "nav:devices")
       .row()
-      .text("🏠 Главное меню", "nav:cabinet")
+      .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
       .add(supportButton(deps, "🆘 Поддержка"));
 
@@ -366,7 +411,7 @@ export function buildBot(deps: BotDeps): Bot {
       .text("180 дней", `${flow}:cfg:180:${chosenDevices}`);
 
     kb.row().text(payLabel, `${flow}:pay:${planDays}:${chosenDevices}`);
-    kb.row().text("🏠 Главное меню", "nav:cabinet");
+    kb.row().text("🏠 Личный кабинет", "nav:cabinet");
     kb.row().add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
@@ -403,7 +448,7 @@ export function buildBot(deps: BotDeps): Bot {
     kb.row()
       .text("🔙 Назад", `${flow}:cfg:${planDays}:${quote.selectedDeviceLimit}`)
       .row()
-      .text("🏠 Главное меню", "nav:cabinet")
+      .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
       .add(supportButton(deps, "🆘 Поддержка"));
 
@@ -445,7 +490,7 @@ export function buildBot(deps: BotDeps): Bot {
       .row()
       .text("Windows и Mac", "guide:desktop")
       .row()
-      .text("🏠 Главное меню", "nav:cabinet")
+      .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
       .add(supportButton(deps));
 
@@ -618,6 +663,7 @@ export function buildBot(deps: BotDeps): Bot {
 
     await showBuyConfig(ctx, CheckoutFlow.BUY, 30, MIN_DEVICE_LIMIT);
   });
+  bot.hears("🏠 Личный кабинет", showCabinet);
   bot.hears("📱 Устройства", showDevices);
   bot.hears("💳 Подписка", showMySubscription);
   bot.hears("🆘 Поддержка", showSupport);
@@ -645,6 +691,18 @@ export function buildBot(deps: BotDeps): Bot {
   bot.callbackQuery("nav:support", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showSupport(ctx);
+  });
+  bot.callbackQuery("nav:promo", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const text = [
+      "🎁 <b>Промокод</b>",
+      "",
+      "Отправь промокод командой:",
+      "<code>/promo CODE</code>",
+      "",
+      "Пример: <code>/promo PARTNER2026</code>",
+    ].join("\n");
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   });
 
   bot.callbackQuery(/^buy:cfg:(30|90|180):(\d+)$/, async (ctx) => {
