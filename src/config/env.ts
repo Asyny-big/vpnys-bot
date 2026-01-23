@@ -35,6 +35,7 @@ type Env = Readonly<{
   cryptobotPlan30Amount?: string;
   cryptobotPlan90Amount?: string;
   cryptobotPlan180Amount?: string;
+  cryptobotDeviceSlotAmount?: string;
 
   workerIntervalSeconds: number;
 }>;
@@ -130,6 +131,7 @@ export function loadEnv(): Env {
     cryptobotPlan30Amount: optional("CRYPTOBOT_PLAN_30_AMOUNT"),
     cryptobotPlan90Amount: optional("CRYPTOBOT_PLAN_90_AMOUNT"),
     cryptobotPlan180Amount: optional("CRYPTOBOT_PLAN_180_AMOUNT"),
+    cryptobotDeviceSlotAmount: optional("CRYPTOBOT_DEVICE_SLOT_AMOUNT"),
 
     workerIntervalSeconds: asInt("WORKER_INTERVAL_SECONDS", process.env.WORKER_INTERVAL_SECONDS ?? "300")
   };

@@ -2,6 +2,7 @@ import type { PrismaClient, Subscription, User } from "@prisma/client";
 import { ThreeXUiService } from "../../integrations/threeXui/threeXuiService";
 import { addDays } from "../../utils/time";
 import { SubscriptionStatus } from "../../db/values";
+import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 
 export type SubscriptionState = Readonly<{
   subscription: Subscription;
@@ -24,6 +25,7 @@ export class SubscriptionService {
     const client = await this.xui.ensureClient({
       inboundId: this.xuiInboundId,
       telegramId: user.telegramId,
+      deviceLimit: MIN_DEVICE_LIMIT,
       flow: this.xuiClientFlow,
     });
 
@@ -34,6 +36,7 @@ export class SubscriptionService {
           xuiInboundId: this.xuiInboundId,
           xuiClientUuid: client.uuid,
           xuiSubscriptionId: client.subscriptionId,
+          deviceLimit: MIN_DEVICE_LIMIT,
           enabled: client.enabled,
           expiresAt: client.expiresAt,
           lastSyncedAt: new Date(),
@@ -51,12 +54,19 @@ export class SubscriptionService {
   }
 
   async syncFromXui(user: User): Promise<SubscriptionState> {
-    const subscription = await this.ensureForUser(user);
+    let subscription = await this.ensureForUser(user);
+    const normalizedDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
+    if (normalizedDeviceLimit !== subscription.deviceLimit) {
+      subscription = await this.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { deviceLimit: normalizedDeviceLimit },
+      });
+    }
 
     const client = await this.xui.findClientByUuid(subscription.xuiInboundId, subscription.xuiClientUuid);
     if (!client) {
       // Repair: DB lost sync with panel. Re-create/find by email.
-      const repaired = await this.xui.ensureClient({ inboundId: subscription.xuiInboundId, telegramId: user.telegramId });
+      const repaired = await this.xui.ensureClient({ inboundId: subscription.xuiInboundId, telegramId: user.telegramId, deviceLimit: subscription.deviceLimit });
       const updated = await this.prisma.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -72,6 +82,9 @@ export class SubscriptionService {
 
     const expiresAt = client.expiresAt;
     const enabled = client.enabled;
+    if (typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
+      await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { deviceLimit: subscription.deviceLimit });
+    }
     const status =
       expiresAt && expiresAt.getTime() <= Date.now()
         ? SubscriptionStatus.EXPIRED
@@ -98,6 +111,10 @@ export class SubscriptionService {
     enable: boolean;
   }): Promise<Subscription> {
     const subscription = await this.ensureForUser(params.user);
+    const deviceLimit = clampDeviceLimit(subscription.deviceLimit);
+    if (deviceLimit !== subscription.deviceLimit) {
+      await this.prisma.subscription.update({ where: { id: subscription.id }, data: { deviceLimit } });
+    }
 
     await this.xui.setExpiryAndEnable({
       inboundId: subscription.xuiInboundId,
@@ -105,6 +122,7 @@ export class SubscriptionService {
       subscriptionId: subscription.xuiSubscriptionId,
       expiresAt: params.expiresAt,
       enabled: params.enable,
+      deviceLimit,
     });
 
     return await this.prisma.subscription.update({
@@ -115,6 +133,51 @@ export class SubscriptionService {
         status: params.expiresAt.getTime() <= Date.now() ? SubscriptionStatus.EXPIRED : SubscriptionStatus.ACTIVE,
         lastSyncedAt: new Date(),
       },
+    });
+  }
+
+  async addDeviceSlot(userId: string): Promise<Subscription> {
+    const claimed = await this.prisma.subscription.updateMany({
+      where: { userId, deviceLimit: { lt: MAX_DEVICE_LIMIT } },
+      data: { deviceLimit: { increment: 1 } },
+    });
+    if (claimed.count === 0) throw new Error("Device limit reached");
+
+    const updated = await this.prisma.subscription.findUnique({ where: { userId } });
+    if (!updated) throw new Error("Subscription not found");
+
+    const deviceLimit = clampDeviceLimit(updated.deviceLimit);
+    if (deviceLimit !== updated.deviceLimit) {
+      await this.prisma.subscription.update({ where: { id: updated.id }, data: { deviceLimit } });
+    }
+
+    await this.xui.updateClient(updated.xuiInboundId, updated.xuiClientUuid, { deviceLimit });
+
+    return await this.prisma.subscription.update({
+      where: { id: updated.id },
+      data: { lastSyncedAt: new Date() },
+    });
+  }
+
+  async ensureDeviceLimit(userId: string, targetDeviceLimit: number): Promise<Subscription> {
+    const subscription = await this.prisma.subscription.findUnique({ where: { userId } });
+    if (!subscription) throw new Error("Subscription not found");
+
+    const target = clampDeviceLimit(targetDeviceLimit);
+    const current = clampDeviceLimit(subscription.deviceLimit);
+    if (current !== subscription.deviceLimit) {
+      await this.prisma.subscription.update({ where: { id: subscription.id }, data: { deviceLimit: current } });
+    }
+
+    const next = current >= target
+      ? { ...subscription, deviceLimit: current }
+      : await this.prisma.subscription.update({ where: { id: subscription.id }, data: { deviceLimit: target } });
+
+    await this.xui.updateClient(next.xuiInboundId, next.xuiClientUuid, { deviceLimit: next.deviceLimit });
+
+    return await this.prisma.subscription.update({
+      where: { id: next.id },
+      data: { lastSyncedAt: new Date() },
     });
   }
 

@@ -34,6 +34,7 @@ async function main(): Promise<void> {
   const cryptobot = env.cryptobotApiToken ? new CryptoBotClient({ apiToken: env.cryptobotApiToken }) : undefined;
 
   const payments = new PaymentService(prisma, subscriptions, {
+    telegramBotToken: env.telegramBotToken,
     yookassa,
     cryptobot,
     paymentsReturnUrl: env.paymentsReturnUrl,
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
       90: env.cryptobotPlan90Amount,
       180: env.cryptobotPlan180Amount,
     },
+    cryptobotDeviceSlotAmount: env.cryptobotDeviceSlotAmount,
   });
 
   const bot = buildBot({

@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { ThreeXUiApiClient, ThreeXUiError } from "./threeXuiApiClient";
+import { clampDeviceLimit } from "../../domain/deviceLimits";
 
 type Inbound = Readonly<{
   id: number;
@@ -17,6 +18,7 @@ export type ThreeXUiClientInfo = Readonly<{
   email: string;
   expiresAt?: Date;
   enabled: boolean;
+  limitIp?: number;
 }>;
 
 export class ThreeXUiService {
@@ -75,6 +77,7 @@ export class ThreeXUiService {
       email: String(client.email ?? ""),
       expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
       enabled: client.enable !== false,
+      limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
     }));
   }
 
@@ -96,6 +99,7 @@ export class ThreeXUiService {
       email: String(client.email),
       expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
       enabled: client.enable !== false,
+      limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
     };
   }
 
@@ -111,6 +115,7 @@ export class ThreeXUiService {
       email: String(client.email ?? ""),
       expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
       enabled: client.enable !== false,
+      limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
     };
   }
 
@@ -120,16 +125,18 @@ export class ThreeXUiService {
     subscriptionId: string;
     expiresAt?: Date;
     enabled: boolean;
+    deviceLimit: number;
     flow?: string;
   }): any {
     const expiryTime = input.expiresAt ? input.expiresAt.getTime() : 0;
+    const limitIp = clampDeviceLimit(input.deviceLimit);
     const patch: any = {
       id: input.uuid,
       email: input.email,
       enable: input.enabled,
       expiryTime,
       subId: input.subscriptionId,
-      limitIp: 1,
+      limitIp,
     };
     if (input.flow) patch.flow = input.flow;
     return patch;
@@ -143,6 +150,7 @@ export class ThreeXUiService {
   async ensureClient(params: {
     inboundId: number;
     telegramId: string;
+    deviceLimit: number;
     flow?: string;
   }): Promise<ThreeXUiClientInfo> {
     const email = this.telegramEmail(params.telegramId);
@@ -158,7 +166,7 @@ export class ThreeXUiService {
       body: JSON.stringify({
         id: params.inboundId,
         settings: JSON.stringify({
-          clients: [this.buildClientPatch({ uuid, email, subscriptionId: subId, enabled: true, flow: params.flow })],
+          clients: [this.buildClientPatch({ uuid, email, subscriptionId: subId, enabled: true, deviceLimit: params.deviceLimit, flow: params.flow })],
         }),
       }),
     });
@@ -167,7 +175,7 @@ export class ThreeXUiService {
     if (!created) throw new ThreeXUiError("3x-ui client creation succeeded but client not found afterwards");
     if (!created.subscriptionId) {
       // Some versions might not persist subId in the client settings until update; enforce.
-      await this.updateClient(params.inboundId, uuid, { subscriptionId: subId });
+      await this.updateClient(params.inboundId, uuid, { subscriptionId: subId, deviceLimit: params.deviceLimit });
       const reread = await this.findClientByEmail(params.inboundId, email);
       if (!reread?.subscriptionId) throw new ThreeXUiError("3x-ui did not persist subscriptionId");
       return reread;
@@ -178,7 +186,7 @@ export class ThreeXUiService {
   async updateClient(
     inboundId: number,
     uuid: string,
-    patch: Partial<Pick<ThreeXUiClientInfo, "expiresAt" | "enabled" | "subscriptionId">>,
+    patch: Partial<Pick<ThreeXUiClientInfo, "expiresAt" | "enabled" | "subscriptionId">> & { deviceLimit?: number },
   ): Promise<void> {
     const raw = await this.getClientRawByUuid(inboundId, uuid);
     if (!raw) throw new ThreeXUiError(`3x-ui client not found: ${uuid}`);
@@ -191,13 +199,21 @@ export class ThreeXUiService {
           ? Number(raw.expiryTime)
           : 0;
 
+    const limitIp = clampDeviceLimit(
+      patch.deviceLimit !== undefined
+        ? patch.deviceLimit
+        : Number.isFinite(raw.limitIp)
+          ? Number(raw.limitIp)
+          : 1,
+    );
+
     const updatedClient = {
       ...raw,
       enable: patch.enabled ?? raw.enable ?? true,
       expiryTime,
       subId: patch.subscriptionId ?? raw.subId ?? "",
-      // Enforce 1 IP as "1 device" approximation.
-      limitIp: 1,
+      // Enforce per-user device limit.
+      limitIp,
     };
 
     // Primary endpoint used by most x-ui/3x-ui versions.
@@ -229,19 +245,21 @@ export class ThreeXUiService {
     subscriptionId: string;
     expiresAt: Date;
     enabled: boolean;
+    deviceLimit: number;
   }): Promise<void> {
     await this.updateClient(params.inboundId, params.uuid, {
       expiresAt: params.expiresAt,
       enabled: params.enabled,
       subscriptionId: params.subscriptionId,
+      deviceLimit: params.deviceLimit,
     });
   }
 
-  async disable(inboundId: number, uuid: string): Promise<void> {
-    await this.updateClient(inboundId, uuid, { enabled: false });
+  async disable(inboundId: number, uuid: string, deviceLimit?: number): Promise<void> {
+    await this.updateClient(inboundId, uuid, { enabled: false, ...(deviceLimit !== undefined ? { deviceLimit } : {}) });
   }
 
-  async enable(inboundId: number, uuid: string): Promise<void> {
-    await this.updateClient(inboundId, uuid, { enabled: true });
+  async enable(inboundId: number, uuid: string, deviceLimit?: number): Promise<void> {
+    await this.updateClient(inboundId, uuid, { enabled: true, ...(deviceLimit !== undefined ? { deviceLimit } : {}) });
   }
 }

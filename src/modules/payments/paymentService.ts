@@ -3,12 +3,18 @@ import { SubscriptionService } from "../subscription/subscriptionService";
 import { YooKassaClient } from "../../integrations/yookassa/yooKassaClient";
 import { CryptoBotClient } from "../../integrations/cryptobot/cryptoBotClient";
 import { randomUUID } from "node:crypto";
-import { PaymentProvider, PaymentStatus } from "../../db/values";
+import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
+import { addDays } from "../../utils/time";
 
 export type CreateCheckoutParams = Readonly<{
   telegramId: string;
   provider: PaymentProvider;
   planDays: 30 | 90 | 180;
+}>;
+
+export type CreateDeviceSlotCheckoutParams = Readonly<{
+  telegramId: string;
+  provider: PaymentProvider;
 }>;
 
 export type CreateCheckoutResult = Readonly<{
@@ -17,16 +23,20 @@ export type CreateCheckoutResult = Readonly<{
 }>;
 
 export class PaymentService {
+  private static readonly DEVICE_SLOT_RUB_MINOR = 50 * 100;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
     private readonly deps: Readonly<{
+      telegramBotToken?: string;
       yookassa?: YooKassaClient;
       cryptobot?: CryptoBotClient;
       paymentsReturnUrl?: string;
       planRubMinorByDays: Record<30 | 90 | 180, number>;
       cryptobotAsset: string;
       cryptobotAmountByDays: Partial<Record<30 | 90 | 180, string>>;
+      cryptobotDeviceSlotAmount?: string;
     }>,
   ) {}
 
@@ -46,6 +56,20 @@ export class PaymentService {
     }
   }
 
+  private async notifyTelegram(telegramId: string, text: string): Promise<void> {
+    const token = this.deps.telegramBotToken;
+    if (!token) return;
+    try {
+      await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: telegramId, text }),
+      });
+    } catch {
+      // ignore
+    }
+  }
+
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     await this.subscriptions.ensureForUser(user);
@@ -62,7 +86,9 @@ export class PaymentService {
           userId: user.id,
           provider: PaymentProvider.YOOKASSA,
           providerPaymentId: `pending_${randomUUID()}`, // overwritten after provider response
+          type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
+          deviceSlots: 0,
           amountMinor,
           currency: "RUB",
           status: PaymentStatus.PENDING,
@@ -96,7 +122,9 @@ export class PaymentService {
           userId: user.id,
           provider: PaymentProvider.CRYPTOBOT,
           providerPaymentId: `pending_${randomUUID()}`,
+          type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
+          deviceSlots: 0,
           amountMinor: 0,
           currency: this.deps.cryptobotAsset,
           status: PaymentStatus.PENDING,
@@ -121,6 +149,150 @@ export class PaymentService {
     throw new Error("Unsupported provider");
   }
 
+  async createDeviceSlotCheckout(params: CreateDeviceSlotCheckoutParams): Promise<CreateCheckoutResult> {
+    const user = await this.getUserOrThrow(params.telegramId);
+    await this.subscriptions.ensureForUser(user);
+
+    if (params.provider === PaymentProvider.YOOKASSA) {
+      if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
+      if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
+
+      const payment = await this.prisma.payment.create({
+        data: {
+          userId: user.id,
+          provider: PaymentProvider.YOOKASSA,
+          providerPaymentId: `pending_${randomUUID()}`,
+          type: PaymentType.DEVICE_SLOT,
+          planDays: 0,
+          deviceSlots: 1,
+          amountMinor: PaymentService.DEVICE_SLOT_RUB_MINOR,
+          currency: "RUB",
+          status: PaymentStatus.PENDING,
+        },
+      });
+
+      const created = await this.deps.yookassa.createPayment({
+        amountRubMinor: PaymentService.DEVICE_SLOT_RUB_MINOR,
+        description: "VPNYS: дополнительное устройство (+1)",
+        returnUrl: this.deps.paymentsReturnUrl,
+        idempotenceKey: payment.id,
+        metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
+      });
+
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { providerPaymentId: created.id },
+      });
+
+      if (!created.confirmationUrl) throw new Error("YooKassa did not return confirmation URL");
+      return { payUrl: created.confirmationUrl, providerPaymentId: created.id };
+    }
+
+    if (params.provider === PaymentProvider.CRYPTOBOT) {
+      if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
+      const amount = this.deps.cryptobotDeviceSlotAmount;
+      if (!amount) throw new Error("CRYPTOBOT_DEVICE_SLOT_AMOUNT is not configured");
+
+      const payment = await this.prisma.payment.create({
+        data: {
+          userId: user.id,
+          provider: PaymentProvider.CRYPTOBOT,
+          providerPaymentId: `pending_${randomUUID()}`,
+          type: PaymentType.DEVICE_SLOT,
+          planDays: 0,
+          deviceSlots: 1,
+          amountMinor: 0,
+          currency: this.deps.cryptobotAsset,
+          status: PaymentStatus.PENDING,
+        },
+      });
+
+      const created = await this.deps.cryptobot.createInvoice({
+        amount,
+        asset: this.deps.cryptobotAsset,
+        description: "VPNYS: дополнительное устройство (+1)",
+        payload: JSON.stringify({ userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: 1 }),
+      });
+
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { providerPaymentId: created.invoiceId },
+      });
+
+      return { payUrl: created.payUrl, providerPaymentId: created.invoiceId };
+    }
+
+    throw new Error("Unsupported provider");
+  }
+
+  private async applyPaymentEffect(paymentId: string, rawWebhook: unknown): Promise<void> {
+    const claim = await this.prisma.payment.updateMany({
+      where: { id: paymentId, appliedAt: null, processingAt: null },
+      data: { processingAt: new Date() },
+    });
+    if (claim.count === 0) return;
+
+    try {
+      const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
+      if (!payment) return;
+      if (payment.appliedAt) return;
+
+      const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
+      if (!user) return;
+
+      if (payment.type === PaymentType.SUBSCRIPTION) {
+        let targetExpiresAt = payment.targetExpiresAt ?? undefined;
+        if (!targetExpiresAt) {
+          const state = await this.subscriptions.syncFromXui(user);
+          const now = new Date();
+          const base = state.expiresAt && state.expiresAt.getTime() > now.getTime() ? state.expiresAt : now;
+          const candidate = addDays(base, payment.planDays);
+
+          await this.prisma.payment.updateMany({
+            where: { id: payment.id, targetExpiresAt: null },
+            data: { targetExpiresAt: candidate },
+          });
+
+          const reread = await this.prisma.payment.findUnique({ where: { id: payment.id } });
+          targetExpiresAt = reread?.targetExpiresAt ?? candidate;
+        }
+
+        await this.subscriptions.setExpiryAndEnable({ user, expiresAt: targetExpiresAt, enable: true });
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
+        await this.notifyTelegram(user.telegramId, `✅ Оплата получена. Подписка продлена до ${targetExpiresAt.toISOString()}`);
+        return;
+      }
+
+      if (payment.type === PaymentType.DEVICE_SLOT) {
+        let targetDeviceLimit = payment.targetDeviceLimit ?? undefined;
+
+        if (!targetDeviceLimit) {
+          const computed = await this.prisma.$transaction(async (tx) => {
+            const subscription = await tx.subscription.findUnique({ where: { userId: payment.userId } });
+            if (!subscription) throw new Error("Subscription not found");
+            const updated = await tx.subscription.update({
+              where: { id: subscription.id },
+              data: { deviceLimit: { increment: Math.max(1, payment.deviceSlots || 1) } },
+            });
+            await tx.payment.update({
+              where: { id: payment.id },
+              data: { targetDeviceLimit: updated.deviceLimit },
+            });
+            return updated.deviceLimit;
+          });
+          targetDeviceLimit = computed;
+        }
+
+        const ensured = await this.subscriptions.ensureDeviceLimit(payment.userId, targetDeviceLimit);
+        await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
+        await this.notifyTelegram(user.telegramId, `✅ Устройство добавлено. Лимит устройств: ${ensured.deviceLimit}`);
+        return;
+      }
+    } finally {
+      await this.prisma.payment.updateMany({ where: { id: paymentId, appliedAt: null }, data: { processingAt: null } });
+    }
+  }
+
   async handleYooKassaWebhook(event: any): Promise<void> {
     const paymentId = event?.object?.id;
     const status = event?.object?.status;
@@ -138,15 +310,13 @@ export class PaymentService {
         : null);
     if (!payment) return;
 
-    const updated = await this.prisma.payment.updateMany({
+    const rawWebhook = this.toJsonString(event);
+    await this.prisma.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: this.toJsonString(event) },
+      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook },
     });
-    if (updated.count === 0) return;
 
-    const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
-    if (!user) return;
-    await this.subscriptions.extend({ user, days: payment.planDays });
+    await this.applyPaymentEffect(payment.id, rawWebhook);
   }
 
   async handleCryptoBotWebhook(event: any): Promise<void> {
@@ -177,14 +347,12 @@ export class PaymentService {
         : null);
     if (!payment) return;
 
-    const updated = await this.prisma.payment.updateMany({
+    const rawWebhook = this.toJsonString(event);
+    await this.prisma.payment.updateMany({
       where: { id: payment.id, status: PaymentStatus.PENDING },
-      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook: this.toJsonString(event) },
+      data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook },
     });
-    if (updated.count === 0) return;
 
-    const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
-    if (!user) return;
-    await this.subscriptions.extend({ user, days: payment.planDays });
+    await this.applyPaymentEffect(payment.id, rawWebhook);
   }
 }

@@ -6,6 +6,7 @@ import { OnboardingService } from "../modules/onboarding/onboardingService";
 import { SubscriptionService } from "../modules/subscription/subscriptionService";
 import { formatUtc } from "../utils/time";
 import type { PaymentService } from "../modules/payments/paymentService";
+import { PaymentProvider } from "../db/values";
 
 export type BotDeps = Readonly<{
   botToken: string;
@@ -27,6 +28,10 @@ export function buildBot(deps: BotDeps): Bot {
     .row()
     .text("180 дней · YooKassa", "pay:yoo:180")
     .text("180 дней · CryptoBot", "pay:cb:180");
+
+  const deviceKeyboard = new InlineKeyboard()
+    .text("+1 (50 ₽) · YooKassa", "device:yoo")
+    .text("+1 · CryptoBot", "device:cb");
 
   bot.command("start", async (ctx) => {
     if (!ctx.from?.id) return;
@@ -109,6 +114,36 @@ export function buildBot(deps: BotDeps): Bot {
       ].join("\n"),
       { reply_markup: MAIN_KEYBOARD },
     );
+  });
+
+  bot.hears(/Устройства/, async (ctx) => {
+    if (!ctx.from?.id) return;
+    const user = await deps.prisma.user.findUnique({ where: { telegramId: String(ctx.from.id) } });
+    if (!user) return await ctx.reply("РЎРЅР°С‡Р°Р»Р° РЅР°Р¶РјРёС‚Рµ /start.", { reply_markup: MAIN_KEYBOARD });
+
+    const sub = await deps.subscriptions.ensureForUser(user);
+
+    await ctx.reply(
+      [`Текущий лимит устройств: ${sub.deviceLimit}`, "Стоимость следующего устройства: +50 ₽"].join("\n"),
+      { reply_markup: deviceKeyboard },
+    );
+  });
+
+  bot.callbackQuery(/^device:(yoo|cb)$/, async (ctx) => {
+    if (!ctx.from?.id) return;
+    const providerRaw = ctx.match[1];
+    const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
+
+    await ctx.answerCallbackQuery();
+    try {
+      const created = await deps.payments.createDeviceSlotCheckout({
+        telegramId: String(ctx.from.id),
+        provider,
+      });
+      await ctx.reply(`Ссылка для оплаты (+1 устройство):\n${created.payUrl}`);
+    } catch (e: any) {
+      await ctx.reply(`Не удалось создать оплату: ${e?.message ?? String(e)}`, { reply_markup: MAIN_KEYBOARD });
+    }
   });
 
   bot.catch((err) => {

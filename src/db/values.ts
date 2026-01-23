@@ -13,6 +13,13 @@ export const PaymentProvider = {
 
 export type PaymentProvider = (typeof PaymentProvider)[keyof typeof PaymentProvider];
 
+export const PaymentType = {
+  SUBSCRIPTION: "SUBSCRIPTION",
+  DEVICE_SLOT: "DEVICE_SLOT",
+} as const;
+
+export type PaymentType = (typeof PaymentType)[keyof typeof PaymentType];
+
 export const PaymentStatus = {
   PENDING: "PENDING",
   SUCCEEDED: "SUCCEEDED",

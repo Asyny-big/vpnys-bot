@@ -62,6 +62,7 @@ export function startSubscriptionWorker(deps: {
             id: true,
             xuiInboundId: true,
             xuiClientUuid: true,
+            deviceLimit: true,
           },
           take: batchSize,
         });
@@ -95,7 +96,7 @@ export function startSubscriptionWorker(deps: {
 
             if (expired) {
               if (client.enabled) {
-                await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid);
+                await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
               }
               await deps.prisma.subscription.update({
                 where: { id: sub.id },

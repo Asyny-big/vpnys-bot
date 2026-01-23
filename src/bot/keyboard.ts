@@ -10,5 +10,6 @@ export const MAIN_KEYBOARD = new Keyboard()
   .text("👥 Реферальная программа")
   .row()
   .text("ℹ️ О сервисе")
+  .row()
+  .text("📱 Устройства")
   .resized();
-
