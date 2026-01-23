@@ -25,13 +25,13 @@ type ReplyOpts = any;
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
   try {
     if (ctx.callbackQuery?.message) {
-      await ctx.editMessageText(text, { ...opts, disable_web_page_preview: true });
+      await ctx.editMessageText(text, { ...opts, link_preview_options: { is_disabled: true } });
       return;
     }
   } catch {
     // fall back to reply
   }
-  await ctx.reply(text, { ...opts, disable_web_page_preview: true });
+  await ctx.reply(text, { ...opts, link_preview_options: { is_disabled: true } });
 }
 
 function cabinetKeyboard(): InlineKeyboard {
@@ -95,11 +95,11 @@ export function buildBot(deps: BotDeps): Bot {
         // if file missing in runtime, just skip photo
       }
 
-      await ctx.reply(text, {
-        parse_mode: "HTML",
-        reply_markup: cabinetKeyboard(),
-        disable_web_page_preview: true,
-      });
+    await ctx.reply(text, {
+      parse_mode: "HTML",
+      reply_markup: cabinetKeyboard(),
+      link_preview_options: { is_disabled: true },
+    });
       return;
     }
 
@@ -502,7 +502,7 @@ export function buildBot(deps: BotDeps): Bot {
     const sub = await deps.subscriptions.ensureForUser(user);
     const url = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
 
-    await ctx.reply(url, { reply_markup: MAIN_KEYBOARD, disable_web_page_preview: true });
+    await ctx.reply(url, { reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
   });
 
   bot.catch((err) => {
