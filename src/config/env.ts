@@ -9,6 +9,7 @@ type Env = Readonly<{
 
   databaseUrl: string;
   telegramBotToken: string;
+  adminUsername?: string;
 
   // What users receive in /sub/<subscription_id> URL (can be public host / reverse proxy).
   publicPanelBaseUrl: string;
@@ -106,6 +107,7 @@ export function loadEnv(): Env {
 
     databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
+    adminUsername: optional("ADMIN_USERNAME"),
 
     publicPanelBaseUrl: ensureUrl("PUBLIC_PANEL_BASE_URL", required("PUBLIC_PANEL_BASE_URL")),
 

@@ -59,6 +59,7 @@ async function main(): Promise<void> {
     subscriptions,
     payments,
     publicPanelBaseUrl: env.publicPanelBaseUrl,
+    adminUsername: env.adminUsername,
   });
 
   const app = Fastify({

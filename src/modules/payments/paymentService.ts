@@ -5,6 +5,8 @@ import { CryptoBotClient } from "../../integrations/cryptobot/cryptoBotClient";
 import { randomUUID } from "node:crypto";
 import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
 import { addDays } from "../../utils/time";
+import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
+import { EXTRA_DEVICE_RUB_MINOR } from "../../domain/pricing";
 
 export type CreateCheckoutParams = Readonly<{
   telegramId: string;
@@ -17,14 +19,19 @@ export type CreateDeviceSlotCheckoutParams = Readonly<{
   provider: PaymentProvider;
 }>;
 
+export type CreateSubscriptionCheckoutParams = Readonly<{
+  telegramId: string;
+  provider: PaymentProvider;
+  planDays: 30 | 90 | 180;
+  deviceLimit: number;
+}>;
+
 export type CreateCheckoutResult = Readonly<{
   payUrl: string;
   providerPaymentId: string;
 }>;
 
 export class PaymentService {
-  private static readonly DEVICE_SLOT_RUB_MINOR = 50 * 100;
-
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
@@ -39,6 +46,51 @@ export class PaymentService {
       cryptobotDeviceSlotAmount?: string;
     }>,
   ) {}
+
+  async quoteSubscription(params: { telegramId: string; planDays: 30 | 90 | 180; deviceLimit: number }): Promise<{
+    currentDeviceLimit: number;
+    selectedDeviceLimit: number;
+    maxDeviceLimit: number;
+    baseRubMinor: number;
+    extraDeviceRubMinor: number;
+    totalRubMinor: number;
+  }> {
+    const user = await this.getUserOrThrow(params.telegramId);
+    const subscription = await this.subscriptions.ensureForUser(user);
+
+    const baseRubMinor = this.deps.planRubMinorByDays[params.planDays];
+    if (!baseRubMinor) throw new Error(`Price is not configured for plan ${params.planDays}`);
+
+    const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
+    const selectedDeviceLimit = clampDeviceLimit(Math.max(currentDeviceLimit, params.deviceLimit));
+    const totalRubMinor = baseRubMinor + (selectedDeviceLimit - 1) * EXTRA_DEVICE_RUB_MINOR;
+
+    return {
+      currentDeviceLimit,
+      selectedDeviceLimit,
+      maxDeviceLimit: MAX_DEVICE_LIMIT,
+      baseRubMinor,
+      extraDeviceRubMinor: EXTRA_DEVICE_RUB_MINOR,
+      totalRubMinor,
+    };
+  }
+
+  async quoteDeviceSlot(params: { telegramId: string }): Promise<{
+    currentDeviceLimit: number;
+    maxDeviceLimit: number;
+    canAdd: boolean;
+    priceRubMinor: number;
+  }> {
+    const user = await this.getUserOrThrow(params.telegramId);
+    const subscription = await this.subscriptions.ensureForUser(user);
+    const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
+    return {
+      currentDeviceLimit,
+      maxDeviceLimit: MAX_DEVICE_LIMIT,
+      canAdd: currentDeviceLimit < MAX_DEVICE_LIMIT,
+      priceRubMinor: EXTRA_DEVICE_RUB_MINOR,
+    };
+  }
 
   private async getUserOrThrow(telegramId: string): Promise<User> {
     const user = await this.prisma.user.findUnique({ where: { telegramId } });
@@ -68,6 +120,49 @@ export class PaymentService {
     } catch {
       // ignore
     }
+  }
+
+  private static decimalToBigInt(value: string, scale: number): bigint {
+    const trimmed = value.trim();
+    if (!trimmed.length) throw new Error("Empty amount");
+
+    const negative = trimmed.startsWith("-");
+    const unsigned = negative ? trimmed.slice(1) : trimmed;
+    const [whole, frac = ""] = unsigned.split(".");
+    const wholeDigits = whole.replace(/^0+(?=\d)/, "");
+    const fracPadded = (frac + "0".repeat(scale)).slice(0, scale);
+
+    if (!/^\d+$/.test(wholeDigits || "0") || !/^\d+$/.test(fracPadded || "0")) {
+      throw new Error(`Invalid decimal: ${value}`);
+    }
+
+    const asBig = BigInt(wholeDigits || "0") * BigInt(10 ** scale) + BigInt(fracPadded || "0");
+    return negative ? -asBig : asBig;
+  }
+
+  private static bigIntToDecimal(value: bigint, scale: number): string {
+    const negative = value < 0n;
+    const abs = negative ? -value : value;
+    const base = 10n ** BigInt(scale);
+    const whole = abs / base;
+    const frac = abs % base;
+    const fracStr = frac.toString().padStart(scale, "0").replace(/0+$/, "");
+    const result = fracStr.length ? `${whole.toString()}.${fracStr}` : whole.toString();
+    return negative ? `-${result}` : result;
+  }
+
+  private computeCryptoAmount(params: { planDays: 30 | 90 | 180; deviceLimit: number }): string {
+    const base = this.deps.cryptobotAmountByDays[params.planDays];
+    if (!base) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_AMOUNT is not configured`);
+    const extra = this.deps.cryptobotDeviceSlotAmount;
+    if (!extra) throw new Error("CRYPTOBOT_DEVICE_SLOT_AMOUNT is not configured");
+
+    const deviceLimit = clampDeviceLimit(params.deviceLimit);
+    const scale = 8;
+    const baseInt = PaymentService.decimalToBigInt(base, scale);
+    const extraInt = PaymentService.decimalToBigInt(extra, scale);
+    const total = baseInt + BigInt(deviceLimit - 1) * extraInt;
+    return PaymentService.bigIntToDecimal(total, scale);
   }
 
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
@@ -149,9 +244,103 @@ export class PaymentService {
     throw new Error("Unsupported provider");
   }
 
+  async createSubscriptionCheckout(params: CreateSubscriptionCheckoutParams): Promise<CreateCheckoutResult> {
+    const user = await this.getUserOrThrow(params.telegramId);
+    const subscription = await this.subscriptions.ensureForUser(user);
+
+    const quoted = await this.quoteSubscription({
+      telegramId: params.telegramId,
+      planDays: params.planDays,
+      deviceLimit: params.deviceLimit,
+    });
+
+    const targetDeviceLimit = quoted.selectedDeviceLimit;
+    const deviceSlots = Math.max(0, targetDeviceLimit - clampDeviceLimit(subscription.deviceLimit));
+
+    if (params.provider === PaymentProvider.YOOKASSA) {
+      if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
+      if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
+
+      const payment = await this.prisma.payment.create({
+        data: {
+          userId: user.id,
+          provider: PaymentProvider.YOOKASSA,
+          providerPaymentId: `pending_${randomUUID()}`,
+          type: PaymentType.SUBSCRIPTION,
+          planDays: params.planDays,
+          deviceSlots,
+          amountMinor: quoted.totalRubMinor,
+          currency: "RUB",
+          status: PaymentStatus.PENDING,
+          targetDeviceLimit,
+        },
+      });
+
+      const created = await this.deps.yookassa.createPayment({
+        amountRubMinor: quoted.totalRubMinor,
+        description: `VPNYS: подписка ${params.planDays} дней · устройств: ${targetDeviceLimit}`,
+        returnUrl: this.deps.paymentsReturnUrl,
+        idempotenceKey: payment.id,
+        metadata: {
+          userId: user.id,
+          telegramId: user.telegramId,
+          paymentId: payment.id,
+          planDays: String(params.planDays),
+          deviceLimit: String(targetDeviceLimit),
+        },
+      });
+
+      await this.prisma.payment.update({ where: { id: payment.id }, data: { providerPaymentId: created.id } });
+      if (!created.confirmationUrl) throw new Error("YooKassa did not return confirmation URL");
+      return { payUrl: created.confirmationUrl, providerPaymentId: created.id };
+    }
+
+    if (params.provider === PaymentProvider.CRYPTOBOT) {
+      if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
+
+      const amount = this.computeCryptoAmount({ planDays: params.planDays, deviceLimit: targetDeviceLimit });
+
+      const payment = await this.prisma.payment.create({
+        data: {
+          userId: user.id,
+          provider: PaymentProvider.CRYPTOBOT,
+          providerPaymentId: `pending_${randomUUID()}`,
+          type: PaymentType.SUBSCRIPTION,
+          planDays: params.planDays,
+          deviceSlots,
+          amountMinor: 0,
+          currency: this.deps.cryptobotAsset,
+          status: PaymentStatus.PENDING,
+          targetDeviceLimit,
+        },
+      });
+
+      const created = await this.deps.cryptobot.createInvoice({
+        amount,
+        asset: this.deps.cryptobotAsset,
+        description: `VPNYS: подписка ${params.planDays} дней · устройств: ${targetDeviceLimit}`,
+        payload: JSON.stringify({
+          userId: user.id,
+          telegramId: user.telegramId,
+          paymentId: payment.id,
+          planDays: params.planDays,
+          deviceLimit: targetDeviceLimit,
+        }),
+      });
+
+      await this.prisma.payment.update({ where: { id: payment.id }, data: { providerPaymentId: created.invoiceId } });
+      return { payUrl: created.payUrl, providerPaymentId: created.invoiceId };
+    }
+
+    throw new Error("Unsupported provider");
+  }
+
   async createDeviceSlotCheckout(params: CreateDeviceSlotCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
-    await this.subscriptions.ensureForUser(user);
+    const sub = await this.subscriptions.ensureForUser(user);
+    if (clampDeviceLimit(sub.deviceLimit) >= MAX_DEVICE_LIMIT) {
+      throw new Error("Device limit reached");
+    }
 
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
@@ -165,14 +354,14 @@ export class PaymentService {
           type: PaymentType.DEVICE_SLOT,
           planDays: 0,
           deviceSlots: 1,
-          amountMinor: PaymentService.DEVICE_SLOT_RUB_MINOR,
+          amountMinor: EXTRA_DEVICE_RUB_MINOR,
           currency: "RUB",
           status: PaymentStatus.PENDING,
         },
       });
 
       const created = await this.deps.yookassa.createPayment({
-        amountRubMinor: PaymentService.DEVICE_SLOT_RUB_MINOR,
+        amountRubMinor: EXTRA_DEVICE_RUB_MINOR,
         description: "VPNYS: дополнительное устройство (+1)",
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
@@ -240,7 +429,7 @@ export class PaymentService {
       const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
       if (!user) return;
 
-      if (payment.type === PaymentType.SUBSCRIPTION) {
+    if (payment.type === PaymentType.SUBSCRIPTION) {
         let targetExpiresAt = payment.targetExpiresAt ?? undefined;
         if (!targetExpiresAt) {
           const state = await this.subscriptions.syncFromXui(user);
@@ -258,6 +447,9 @@ export class PaymentService {
         }
 
         await this.subscriptions.setExpiryAndEnable({ user, expiresAt: targetExpiresAt, enable: true });
+        if (typeof payment.targetDeviceLimit === "number") {
+          await this.subscriptions.ensureDeviceLimit(payment.userId, payment.targetDeviceLimit);
+        }
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
         await this.notifyTelegram(user.telegramId, `✅ Оплата получена. Подписка продлена до ${targetExpiresAt.toISOString()}`);
         return;
@@ -270,10 +462,15 @@ export class PaymentService {
           const computed = await this.prisma.$transaction(async (tx) => {
             const subscription = await tx.subscription.findUnique({ where: { userId: payment.userId } });
             if (!subscription) throw new Error("Subscription not found");
-            const updated = await tx.subscription.update({
-              where: { id: subscription.id },
-              data: { deviceLimit: { increment: Math.max(1, payment.deviceSlots || 1) } },
-            });
+            const current = clampDeviceLimit(subscription.deviceLimit);
+            const slots = Math.max(1, Math.floor(payment.deviceSlots || 1));
+            const target = clampDeviceLimit(Math.min(MAX_DEVICE_LIMIT, current + slots));
+            const updated = current === target
+              ? subscription
+              : await tx.subscription.update({
+                where: { id: subscription.id },
+                data: { deviceLimit: target },
+              });
             await tx.payment.update({
               where: { id: payment.id },
               data: { targetDeviceLimit: updated.deviceLimit },
