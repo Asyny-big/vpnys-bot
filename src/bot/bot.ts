@@ -22,6 +22,26 @@ export type BotDeps = Readonly<{
 
 type ReplyOpts = any;
 
+type Support = Readonly<{
+  url?: string;
+}>;
+
+function support(deps: BotDeps): Support {
+  const username = deps.adminUsername?.replace(/^@/, "");
+  if (!username) return {};
+  return { url: `https://t.me/${encodeURIComponent(username)}` };
+}
+
+function supportButton(deps: BotDeps, label = "🆘 Поддержка"): InlineKeyboard {
+  const sup = support(deps);
+  if (sup.url) return new InlineKeyboard().url(label, sup.url);
+  return new InlineKeyboard().text(label, "nav:support");
+}
+
+function backToCabinetKeyboard(deps: BotDeps): InlineKeyboard {
+  return new InlineKeyboard().text("🔙 Назад", "nav:cabinet").row().add(supportButton(deps));
+}
+
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
   try {
     if (ctx.callbackQuery?.message) {
@@ -34,55 +54,101 @@ async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promis
   await ctx.reply(text, { ...opts, link_preview_options: { is_disabled: true } });
 }
 
-function cabinetKeyboard(): InlineKeyboard {
-  return new InlineKeyboard()
+function cabinetKeyboard(deps: BotDeps): InlineKeyboard {
+  const kb = new InlineKeyboard()
     .text("🔐 Моя подписка", "nav:sub")
-    .text("💳 Оплатить", "nav:pay")
+    .text("💳 Оформить подписку", "nav:buy")
     .row()
     .text("📱 Устройства", "nav:devices")
     .text("🧾 Инструкция", "nav:guide")
     .row()
-    .text("✉️ Написать админу", "nav:admin");
-}
+    .text("🆘 Написать в поддержку", "nav:support");
 
-function backToCabinetKeyboard(): InlineKeyboard {
-  return new InlineKeyboard().text("🔙 Назад", "nav:cabinet");
+  const sup = support(deps);
+  if (sup.url) {
+    return new InlineKeyboard()
+      .text("🔐 Моя подписка", "nav:sub")
+      .text("💳 Оформить подписку", "nav:buy")
+      .row()
+      .text("📱 Устройства", "nav:devices")
+      .text("🧾 Инструкция", "nav:guide")
+      .row()
+      .url("🆘 Написать в поддержку", sup.url);
+  }
+
+  return kb;
 }
 
 export function buildBot(deps: BotDeps): Bot {
   const bot = new Bot(deps.botToken);
+  const inFlight = new Map<string, number>();
+  const inflightTtlMs = 30_000;
 
-  const showCabinet = async (ctx: any): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
-    const user = await deps.prisma.user.findUnique({ where: { telegramId } });
-    if (!user) {
-      await replyOrEdit(ctx, "Сначала нажми /start — и я всё настрою 👇", { reply_markup: MAIN_KEYBOARD });
+  const lock = (key: string): boolean => {
+    const now = Date.now();
+    for (const [k, startedAt] of inFlight) {
+      if (now - startedAt > inflightTtlMs) inFlight.delete(k);
+    }
+    if (inFlight.has(key)) return false;
+    inFlight.set(key, now);
+    return true;
+  };
+
+  const unlock = (key: string): void => {
+    inFlight.delete(key);
+  };
+
+  const showSupport = async (ctx: any): Promise<void> => {
+    const username = deps.adminUsername?.replace(/^@/, "");
+    if (!username) {
+      await replyOrEdit(ctx, "Поддержка пока не настроена. Но мы рядом.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
 
+    const url = `https://t.me/${encodeURIComponent(username)}`;
+    const text = [`Напиши нам сюда 👇`, url].join("\n");
+
+    const kb = new InlineKeyboard().url("🆘 Открыть чат", url).row().text("🔙 Назад", "nav:cabinet");
+    await replyOrEdit(ctx, text, { reply_markup: kb });
+  };
+
+  const requireUser = async (ctx: any): Promise<{ telegramId: string; user: any } | null> => {
+    if (!ctx.from?.id) return null;
+    const telegramId = String(ctx.from.id);
+    const user = await deps.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      await replyOrEdit(ctx, "Нажми /start. Я всё настрою за секунду.", { reply_markup: MAIN_KEYBOARD });
+      return null;
+    }
+    return { telegramId, user };
+  };
+
+  const showCabinet = async (ctx: any): Promise<void> => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    const { telegramId, user } = required;
     const subscription = await deps.subscriptions.ensureForUser(user);
 
-    const now = Date.now();
-    const active = !!subscription.expiresAt && subscription.expiresAt.getTime() > now && subscription.enabled;
+    const active = !!subscription.expiresAt && subscription.expiresAt.getTime() > Date.now() && subscription.enabled;
 
     const name = escapeHtml([ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(" ") || ctx.from.username || "друг");
 
-    const statusLine = active ? "✅ Подписка: активна" : "❌ Подписка: нет (или закончилась)";
-    const expiresLine = subscription.expiresAt ? `⏳ До: <b>${escapeHtml(formatUtc(subscription.expiresAt))}</b>` : "⏳ До: <b>не задано</b>";
+    const statusLine = active ? "✅ Подписка активна" : "❌ Подписки нет";
+    const expiresLine = active && subscription.expiresAt ? `⏳ До: <b>${escapeHtml(formatUtc(subscription.expiresAt))}</b>` : "";
     const devicesLine = `📱 Устройства: <b>${escapeHtml(formatDevices(subscription.deviceLimit))}</b>`;
 
     const text = [
-      `👤 <b>Личный кабинет</b>`,
+      "👤 <b>Личный кабинет</b>",
       "",
-      `Привет, <b>${name}</b>!`,
-      `ID: <code>${escapeHtml(telegramId)}</code>`,
+      `Привет, <b>${name}</b>`,
+      `Твой ID: <code>${escapeHtml(telegramId)}</code>`,
       "",
       statusLine,
-      active ? expiresLine : "",
+      expiresLine,
       devicesLine,
       "",
-      "Выбирай, что делаем дальше 👇",
+      "Жми кнопку и поехали 🦊",
     ]
       .filter(Boolean)
       .join("\n");
@@ -92,35 +158,27 @@ export function buildBot(deps: BotDeps): Bot {
       try {
         await ctx.replyWithPhoto(new InputFile(photoPath));
       } catch {
-        // if file missing in runtime, just skip photo
+        // ignore
       }
 
-    await ctx.reply(text, {
-      parse_mode: "HTML",
-      reply_markup: cabinetKeyboard(),
-      link_preview_options: { is_disabled: true },
-    });
+      await ctx.reply(text, { parse_mode: "HTML", reply_markup: cabinetKeyboard(deps), link_preview_options: { is_disabled: true } });
       return;
     }
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: cabinetKeyboard() });
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: cabinetKeyboard(deps) });
   };
 
   const showMySubscription = async (ctx: any): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
-    const user = await deps.prisma.user.findUnique({ where: { telegramId } });
-    if (!user) {
-      await replyOrEdit(ctx, "Сначала нажми /start — и я всё настрою 👇", { reply_markup: MAIN_KEYBOARD });
-      return;
-    }
+    const required = await requireUser(ctx);
+    if (!required) return;
 
+    const { user } = required;
     const state = await deps.subscriptions.syncFromXui(user);
     const sub = state.subscription;
 
     const active = !!state.expiresAt && state.expiresAt.getTime() > Date.now() && state.enabled;
     const status = active ? "✅ Активна" : "❌ Не активна";
-    const expires = state.expiresAt ? formatUtc(state.expiresAt) : "не задано";
+    const expires = state.expiresAt ? formatUtc(state.expiresAt) : "";
 
     const url = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
 
@@ -128,93 +186,22 @@ export function buildBot(deps: BotDeps): Bot {
       "🔐 <b>Моя подписка</b>",
       "",
       `Статус: <b>${escapeHtml(status)}</b>`,
-      `До: <b>${escapeHtml(expires)}</b>`,
+      expires ? `До: <b>${escapeHtml(expires)}</b>` : "",
       `Устройства: <b>${escapeHtml(formatDevices(sub.deviceLimit))}</b>`,
       "",
-      "Ссылка (просто скопируй и вставь в приложение):",
+      "Твоя VPN ссылка 👇",
       `<code>${escapeHtml(url)}</code>`,
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     const kb = new InlineKeyboard()
-      .text("📋 Скопировать ссылку", "sub:copy")
+      .text("📋 Скопировать", "sub:copy")
       .row()
       .text("🧾 Инструкция", "nav:guide")
-      .text("🔙 Назад", "nav:cabinet");
-
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
-  };
-
-  const showPayStep1 = async (ctx: any): Promise<void> => {
-    const kb = new InlineKeyboard()
-      .text("30 дней", "pay:term:30")
-      .text("90 дней", "pay:term:90")
-      .text("180 дней", "pay:term:180")
+      .text("🔙 Назад", "nav:cabinet")
       .row()
-      .text("🔙 Назад", "nav:cabinet");
-
-    await replyOrEdit(ctx, "Выбери срок подписки 🗓️", { reply_markup: kb });
-  };
-
-  const showPayStep2 = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
-
-    let quote: Awaited<ReturnType<PaymentService["quoteSubscription"]>>;
-    try {
-      quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
-    } catch (e: any) {
-      await replyOrEdit(ctx, `Не получилось посчитать цену: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard() });
-      return;
-    }
-
-    const chosen = quote.selectedDeviceLimit;
-    const base = formatRubMinor(quote.baseRubMinor);
-    const extra = formatRubMinor(quote.extraDeviceRubMinor);
-    const total = formatRubMinor(quote.totalRubMinor);
-
-    const text = [
-      "⚙️ <b>Настрой тариф</b>",
-      "",
-      `Срок: <b>${planDays} дней</b>`,
-      `Базово: ${MIN_DEVICE_LIMIT} устройство`,
-      `Сейчас выбрано: <b>${chosen}</b>`,
-      `Цена: <b>${escapeHtml(total)}</b>`,
-      "",
-      `1 устройство = ${escapeHtml(base)}`,
-      `+1 устройство = +${escapeHtml(extra)} (максимум ${MAX_DEVICE_LIMIT})`,
-    ].join("\n");
-
-    const kb = new InlineKeyboard();
-    for (let i = MIN_DEVICE_LIMIT; i <= MAX_DEVICE_LIMIT; i++) {
-      kb.text(`${i} ${i === 1 ? "устройство" : "устройства"}`, `pay:dev:${planDays}:${i}`);
-      if (i % 3 === 0) kb.row();
-    }
-    kb.row().text(`💳 Оплатить ${total}`, `pay:go:${planDays}:${chosen}`);
-    kb.row().text("🔙 Назад", "pay:back:term");
-
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
-  };
-
-  const showPayStep3 = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
-    let quote: Awaited<ReturnType<PaymentService["quoteSubscription"]>>;
-    try {
-      quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
-    } catch (e: any) {
-      await replyOrEdit(ctx, `Не получилось посчитать цену: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard() });
-      return;
-    }
-
-    const total = formatRubMinor(quote.totalRubMinor);
-
-    const text = [`Выбери способ оплаты 💰`, "", `Сумма: <b>${escapeHtml(total)}</b>`].join("\n");
-
-    const kb = new InlineKeyboard()
-      .text("₽ Рубли (YooKassa)", `pay:do:yoo:${planDays}:${quote.selectedDeviceLimit}`)
-      .text("$ Крипта (CryptoBot)", `pay:do:cb:${planDays}:${quote.selectedDeviceLimit}`)
-      .row()
-      .text("🔙 Назад", `pay:dev:${planDays}:${quote.selectedDeviceLimit}`);
+      .add(supportButton(deps, "🆘 Написать в поддержку"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
@@ -222,30 +209,31 @@ export function buildBot(deps: BotDeps): Bot {
   const showDevices = async (ctx: any): Promise<void> => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
-    let quoted: Awaited<ReturnType<PaymentService["quoteDeviceSlot"]>>;
+
+    let quoted: any;
     try {
       quoted = await deps.payments.quoteDeviceSlot({ telegramId });
-    } catch (e: any) {
-      await replyOrEdit(ctx, "Сначала нажми /start — и я всё настрою 👇", { reply_markup: MAIN_KEYBOARD });
+    } catch {
+      await replyOrEdit(ctx, "Нажми /start. Я всё настрою за секунду.", { reply_markup: MAIN_KEYBOARD });
       return;
     }
 
     const textLines = [
       "📱 <b>Устройства</b>",
       "",
-      `Текущее: <b>${escapeHtml(formatDevices(quoted.currentDeviceLimit))}</b>`,
+      `Сейчас: <b>${escapeHtml(formatDevices(quoted.currentDeviceLimit))}</b>`,
     ];
 
     const kb = new InlineKeyboard();
 
     if (quoted.canAdd) {
-      textLines.push(`Следующее устройство: <b>+${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`);
-      kb.text(`➕ Добавить устройство (+${formatRubMinor(quoted.priceRubMinor)})`, "dev:add").row();
+      textLines.push(`Следующее: <b>+${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`);
+      kb.text(`➕ Добавить за ${formatRubMinor(quoted.priceRubMinor)}`, "dev:pay").row();
     } else {
-      textLines.push("🚫 Достигнут максимальный лимит устройств");
+      textLines.push("🚫 Упёрлись в максимум. Больше не влезет.");
     }
 
-    kb.text("🔙 Назад", "nav:cabinet");
+    kb.text("🔙 Назад", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, textLines.join("\n"), { parse_mode: "HTML", reply_markup: kb });
   };
@@ -253,26 +241,104 @@ export function buildBot(deps: BotDeps): Bot {
   const showDevicePayMethod = async (ctx: any): Promise<void> => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
-    let quoted: Awaited<ReturnType<PaymentService["quoteDeviceSlot"]>>;
+
+    let quoted: any;
     try {
       quoted = await deps.payments.quoteDeviceSlot({ telegramId });
     } catch {
-      await replyOrEdit(ctx, "Сначала нажми /start — и я всё настрою 👇", { reply_markup: MAIN_KEYBOARD });
+      await replyOrEdit(ctx, "Нажми /start. Я всё настрою за секунду.", { reply_markup: MAIN_KEYBOARD });
       return;
     }
 
     if (!quoted.canAdd) {
-      await replyOrEdit(ctx, "🚫 Уже максимум устройств. Больше не влезет 🧱", { reply_markup: backToCabinetKeyboard() });
+      await replyOrEdit(ctx, "🚫 Уже максимум устройств.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
 
-    const text = [`Выбери способ оплаты 💰`, "", `+1 устройство: <b>${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`].join("\n");
+    const text = ["Выбери, чем платим 💰", "", `+1 устройство: <b>${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`].join("\n");
 
     const kb = new InlineKeyboard()
-      .text("₽ Рубли (YooKassa)", "dev:do:yoo")
-      .text("$ Крипта (CryptoBot)", "dev:do:cb")
+      .text("₽ Рубли", "dev:do:yoo")
+      .text("$ Крипта", "dev:do:cb")
       .row()
-      .text("🔙 Назад", "nav:devices");
+      .text("🔙 Назад", "nav:devices")
+      .row()
+      .add(supportButton(deps, "🆘 Поддержка"));
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const showBuyConfig = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
+    if (!ctx.from?.id) return;
+    const telegramId = String(ctx.from.id);
+
+    let quote: any;
+    try {
+      quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
+    } catch (e: any) {
+      await replyOrEdit(ctx, `Не получилось посчитать цену: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const chosenDevices = quote.selectedDeviceLimit;
+    const total = formatRubMinor(quote.totalRubMinor);
+
+    const text = [
+      "🦊 Оформляем подписку",
+      "",
+      "Сколько устройств подключаем",
+      `Сейчас: <b>${escapeHtml(formatDevices(chosenDevices))}</b>`,
+      `Срок: <b>${planDays} дней</b>`,
+      "",
+      `${chosenDevices} устройств — ${escapeHtml(total)}`,
+    ].join("\n");
+
+    const kb = new InlineKeyboard()
+      .text("➖", `buy:dev:dec:${planDays}:${chosenDevices}`)
+      .text(`${chosenDevices}`, `buy:dev:noop:${planDays}:${chosenDevices}`)
+      .text("➕", `buy:dev:inc:${planDays}:${chosenDevices}`)
+      .row();
+
+    for (let i = MIN_DEVICE_LIMIT; i <= MAX_DEVICE_LIMIT; i++) {
+      kb.text(`${i}`, `buy:cfg:${planDays}:${i}`);
+      if (i % 6 === 0) kb.row();
+    }
+
+    kb.row()
+      .text("30 дней", `buy:cfg:30:${chosenDevices}`)
+      .text("90 дней", `buy:cfg:90:${chosenDevices}`)
+      .text("180 дней", `buy:cfg:180:${chosenDevices}`);
+
+    kb.row().text(`Оплатить ${total}`, `buy:pay:${planDays}:${chosenDevices}`);
+    kb.row().text("🔙 Назад", "nav:cabinet");
+    kb.row().add(supportButton(deps, "🆘 Поддержка"));
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const showBuyMethod = async (ctx: any, planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
+    if (!ctx.from?.id) return;
+    const telegramId = String(ctx.from.id);
+
+    let quote: any;
+    try {
+      quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
+    } catch (e: any) {
+      await replyOrEdit(ctx, `Не получилось посчитать цену: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const total = formatRubMinor(quote.totalRubMinor);
+
+    const text = ["Выбери, чем платим 💰", "", `Сумма: <b>${escapeHtml(total)}</b>`, `Срок: <b>${planDays} дней</b>`, `Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`].join("\n");
+
+    const kb = new InlineKeyboard()
+      .text("₽ Рубли", `buy:do:yoo:${planDays}:${quote.selectedDeviceLimit}`)
+      .text("$ Крипта", `buy:do:cb:${planDays}:${quote.selectedDeviceLimit}`)
+      .row()
+      .text("🔙 Назад", `buy:cfg:${planDays}:${quote.selectedDeviceLimit}`)
+      .row()
+      .add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
@@ -280,76 +346,57 @@ export function buildBot(deps: BotDeps): Bot {
   const showGuideMenu = async (ctx: any): Promise<void> => {
     const kb = new InlineKeyboard()
       .text("Android", "guide:android")
-      .text("iOS", "guide:ios")
+      .text("iPhone", "guide:ios")
       .row()
-      .text("Windows / macOS", "guide:desktop")
+      .text("Windows и Mac", "guide:desktop")
       .row()
-      .text("🔙 Назад", "nav:cabinet");
+      .text("🔙 Назад", "nav:cabinet")
+      .row()
+      .add(supportButton(deps));
 
-    await replyOrEdit(ctx, "🧾 Инструкция: выбери устройство", { reply_markup: kb });
+    await replyOrEdit(ctx, "🧾 Инструкция. Выбери устройство", { reply_markup: kb });
   };
 
   const showGuide = async (ctx: any, platform: "android" | "ios" | "desktop"): Promise<void> => {
-    const title = platform === "android" ? "Android" : platform === "ios" ? "iOS" : "Windows / macOS";
+    const title = platform === "android" ? "Android" : platform === "ios" ? "iPhone" : "Windows и Mac";
 
     const steps =
       platform === "android"
         ? [
-            "1) Скачай приложение <b>Hiddify</b> или <b>v2rayNG</b>",
-            "2) Нажми: “Добавить подписку”",
-            "3) Вставь ссылку из «Моя подписка»",
-            "4) Нажми “Подключить” — и ты в домике 🦊",
+            "1. Скачай Hiddify или v2rayNG",
+            "2. Открой приложение и добавь подписку",
+            "3. Вставь VPN ссылку из раздела Моя подписка",
+            "4. Нажми Подключить и радуйся",
           ]
         : platform === "ios"
           ? [
-              "1) Скачай приложение <b>Hiddify</b>",
-              "2) Нажми: “Добавить подписку”",
-              "3) Вставь ссылку из «Моя подписка»",
-              "4) Нажми “Подключить” — поехали 🚀",
+              "1. Скачай Hiddify",
+              "2. Добавь подписку",
+              "3. Вставь VPN ссылку из раздела Моя подписка",
+              "4. Нажми Подключить",
             ]
           : [
-              "1) Скачай <b>Hiddify</b> для ПК",
-              "2) Вставь ссылку из «Моя подписка»",
-              "3) Нажми “Подключить”",
-              "4) Готово. VPN включён — жизнь хороша 😎",
+              "1. Скачай Hiddify",
+              "2. Вставь VPN ссылку из раздела Моя подписка",
+              "3. Нажми Подключить",
+              "4. Готово",
             ];
 
-    const text = [
-      `🧾 <b>Инструкция · ${title}</b>`,
-      "",
-      ...steps,
-      "",
-      "Если что-то не получается — жми «Написать админу» (он иногда кусается, но помогает).",
-    ].join("\n");
+    const text = [`🧾 <b>Инструкция. ${escapeHtml(title)}</b>`, "", ...steps, "", "Если что-то не так, жми Поддержка."].join("\n");
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard() });
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
   const showAbout = async (ctx: any): Promise<void> => {
     const text = [
-      "🦊 <b>ЛисVPN</b> — быстрый и хитрый VPN.",
-      "Работает там, где другие падают.",
-      "Без боли. Просто включил — и поехали.",
+      "🦊 <b>ЛисVPN</b>",
+      "Интернет без нервов.",
+      "Включил и поехали.",
       "",
-      "Никаких конфигов в боте — только удобная ссылка.",
+      "Если что-то глючит, мы рядом.",
     ].join("\n");
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard() });
-  };
-
-  const showAdmin = async (ctx: any): Promise<void> => {
-    const username = deps.adminUsername?.replace(/^@/, "");
-    if (!username) {
-      await replyOrEdit(ctx, "Админ пока не настроен 😅\n(нужно задать ADMIN_USERNAME)", { reply_markup: backToCabinetKeyboard() });
-      return;
-    }
-
-    const kb = new InlineKeyboard()
-      .url("✉️ Открыть чат с админом", `https://t.me/${encodeURIComponent(username)}`)
-      .row()
-      .text("🔙 Назад", "nav:cabinet");
-
-    await replyOrEdit(ctx, `Напиши админу: <b>@${escapeHtml(username)}</b>`, { parse_mode: "HTML", reply_markup: kb });
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
   bot.command("start", async (ctx) => {
@@ -359,19 +406,20 @@ export function buildBot(deps: BotDeps): Bot {
     const result = await deps.onboarding.handleStart(telegramId);
 
     const lines: string[] = [];
-    lines.push("🦊 Привет! Я ЛисVPN. Я помогу тебе быть в интернете как ниндзя.");
-    if (result.isTrialGrantedNow) lines.push("🎁 Тест-драйв включён: 7 дней (1 устройство). ");
-    if (result.expiresAt) lines.push(`⏳ Подписка до: ${formatUtc(result.expiresAt)}`);
-    lines.push("\nЖми кнопки внизу 👇");
+    lines.push("ЛисVPN 🦊. Интернет без нервов.");
+    if (result.isTrialGrantedNow) lines.push("Подарок включён. 7 дней. 1 устройство.");
+    if (result.expiresAt) lines.push(`Подписка до ${formatUtc(result.expiresAt)}`);
+    lines.push("Жми Личный кабинет и забирай ссылку 👇");
 
-    await ctx.reply(lines.join("\n"), { reply_markup: MAIN_KEYBOARD });
+    await ctx.reply(lines.join("\n"), { reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
   });
 
   bot.hears("👤 Личный кабинет", showCabinet);
   bot.hears("🔐 Моя подписка", showMySubscription);
-  bot.hears("💳 Оплатить", showPayStep1);
+  bot.hears("💳 Оформить подписку", (ctx) => showBuyConfig(ctx, 30, MIN_DEVICE_LIMIT));
   bot.hears("🧾 Инструкция", showGuideMenu);
   bot.hears("ℹ️ О сервисе", showAbout);
+  bot.hears("🆘 Написать в поддержку", showSupport);
 
   bot.callbackQuery("nav:cabinet", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -381,9 +429,9 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     await showMySubscription(ctx);
   });
-  bot.callbackQuery("nav:pay", async (ctx) => {
+  bot.callbackQuery("nav:buy", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showPayStep1(ctx);
+    await showBuyConfig(ctx, 30, MIN_DEVICE_LIMIT);
   });
   bot.callbackQuery("nav:devices", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -393,37 +441,41 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     await showGuideMenu(ctx);
   });
-  bot.callbackQuery("nav:admin", async (ctx) => {
+  bot.callbackQuery("nav:support", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showAdmin(ctx);
+    await showSupport(ctx);
   });
 
-  bot.callbackQuery(/^pay:term:(30|90|180)$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const days = Number(ctx.match[1]) as 30 | 90 | 180;
-    await showPayStep2(ctx, days, MIN_DEVICE_LIMIT);
-  });
-
-  bot.callbackQuery(/^pay:dev:(30|90|180):(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^buy:cfg:(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const days = Number(ctx.match[1]) as 30 | 90 | 180;
     const devices = Number(ctx.match[2]);
-    await showPayStep2(ctx, days, devices);
+    await showBuyConfig(ctx, days, devices);
   });
 
-  bot.callbackQuery(/^pay:go:(30|90|180):(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^buy:dev:(inc|dec|noop):(30|90|180):(\d+)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const action = ctx.match[1] as "inc" | "dec" | "noop";
+    const days = Number(ctx.match[2]) as 30 | 90 | 180;
+    const devices = Number(ctx.match[3]);
+
+    if (action === "noop") {
+      await showBuyConfig(ctx, days, devices);
+      return;
+    }
+
+    const next = action === "inc" ? devices + 1 : devices - 1;
+    await showBuyConfig(ctx, days, next);
+  });
+
+  bot.callbackQuery(/^buy:pay:(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     const days = Number(ctx.match[1]) as 30 | 90 | 180;
     const devices = Number(ctx.match[2]);
-    await showPayStep3(ctx, days, devices);
+    await showBuyMethod(ctx, days, devices);
   });
 
-  bot.callbackQuery("pay:back:term", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await showPayStep1(ctx);
-  });
-
-  bot.callbackQuery(/^pay:do:(yoo|cb):(30|90|180):(\d+)$/, async (ctx) => {
+  bot.callbackQuery(/^buy:do:(yoo|cb):(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     if (!ctx.from?.id) return;
 
@@ -432,6 +484,8 @@ export function buildBot(deps: BotDeps): Bot {
     const planDays = Number(ctx.match[2]) as 30 | 90 | 180;
     const deviceLimit = Number(ctx.match[3]);
 
+    const lockKey = `buy:do:${ctx.from.id}:${providerRaw}:${planDays}:${deviceLimit}:${ctx.callbackQuery?.message?.message_id ?? ""}`;
+    if (!lock(lockKey)) return;
     try {
       const created = await deps.payments.createSubscriptionCheckout({
         telegramId: String(ctx.from.id),
@@ -440,22 +494,19 @@ export function buildBot(deps: BotDeps): Bot {
         deviceLimit,
       });
 
-      const text = [
-        "✅ Почти готово!",
-        "",
-        "Открой ссылку и оплати 👇",
-        created.payUrl,
-        "",
-        "После оплаты я сам всё обновлю.",
-      ].join("\n");
+      const text = ["Готово. Остался один шаг.", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я всё обновлю сам."]
+        .join("\n");
 
-      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard() });
+      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
-      await replyOrEdit(ctx, `Не удалось создать оплату: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard() });
+      const text = `Не удалось создать оплату: ${e?.message ?? String(e)}`;
+      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+    } finally {
+      unlock(lockKey);
     }
   });
 
-  bot.callbackQuery("dev:add", async (ctx) => {
+  bot.callbackQuery("dev:pay", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showDevicePayMethod(ctx);
   });
@@ -467,24 +518,23 @@ export function buildBot(deps: BotDeps): Bot {
     const providerRaw = ctx.match[1];
     const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
 
+    const lockKey = `dev:do:${ctx.from.id}:${providerRaw}:${ctx.callbackQuery?.message?.message_id ?? ""}`;
+    if (!lock(lockKey)) return;
     try {
       const created = await deps.payments.createDeviceSlotCheckout({
         telegramId: String(ctx.from.id),
         provider,
       });
 
-      const text = [
-        "📱 +1 устройство",
-        "",
-        "Открой ссылку и оплати 👇",
-        created.payUrl,
-        "",
-        "После оплаты лимит устройств увеличится автоматически.",
-      ].join("\n");
+      const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты лимит вырастет автоматически."]
+        .join("\n");
 
-      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard() });
+      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
-      await replyOrEdit(ctx, `Не удалось создать оплату: ${e?.message ?? String(e)}`, { reply_markup: backToCabinetKeyboard() });
+      const text = `Не удалось создать оплату: ${e?.message ?? String(e)}`;
+      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+    } finally {
+      unlock(lockKey);
     }
   });
 
@@ -494,15 +544,7 @@ export function buildBot(deps: BotDeps): Bot {
   });
 
   bot.callbackQuery("sub:copy", async (ctx) => {
-    await ctx.answerCallbackQuery({ text: "Лови ссылку 👇", show_alert: false });
-    if (!ctx.from?.id) return;
-    const user = await deps.prisma.user.findUnique({ where: { telegramId: String(ctx.from.id) } });
-    if (!user) return;
-
-    const sub = await deps.subscriptions.ensureForUser(user);
-    const url = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
-
-    await ctx.reply(url, { reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
+    await ctx.answerCallbackQuery({ text: "Скопируй ссылку в сообщении", show_alert: false });
   });
 
   bot.catch((err) => {
