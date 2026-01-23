@@ -292,10 +292,17 @@ export function buildBot(deps: BotDeps): Bot {
 
     const text = ["Выбери, как оплачиваем 💰", "", `+1 устройство — <b>${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`].join("\n");
 
-    const kb = new InlineKeyboard()
-      .text("₽ Рубли", "dev:do:yoo")
-      .text("$ Крипта", "dev:do:cb")
-      .row()
+    const hasYoo = deps.payments.isYooKassaEnabled();
+    const hasCb = deps.payments.isCryptoBotEnabled();
+    if (!hasYoo && !hasCb) {
+      await replyOrEdit(ctx, "Оплата сейчас недоступна. Попробуй позже или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const kb = new InlineKeyboard();
+    if (hasYoo) kb.text("₽ Рубли", "dev:do:yoo");
+    if (hasCb) kb.text("$ Крипта", "dev:do:cb");
+    kb.row()
       .text("🔙 Назад", "nav:devices")
       .row()
       .text("🏠 Главное меню", "nav:cabinet")
@@ -309,10 +316,19 @@ export function buildBot(deps: BotDeps): Bot {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
 
+    const hasYoo = deps.payments.isYooKassaEnabled();
+    const hasCb = deps.payments.isCryptoBotEnabled();
+    if (!hasYoo && !hasCb) {
+      await replyOrEdit(ctx, "Оплата сейчас недоступна. Попробуй позже или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
     let quote: any;
     try {
       quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
     } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("quoteSubscription failed", { telegramId, flow, planDays, deviceLimit, error: e });
       await replyOrEdit(ctx, "Не получилось посчитать цену. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
@@ -364,6 +380,8 @@ export function buildBot(deps: BotDeps): Bot {
     try {
       quote = await deps.payments.quoteSubscription({ telegramId, planDays, deviceLimit });
     } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("quoteSubscription failed", { telegramId, flow, planDays, deviceLimit, error: e });
       await replyOrEdit(ctx, "Не получилось посчитать цену. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
@@ -372,10 +390,17 @@ export function buildBot(deps: BotDeps): Bot {
 
     const text = ["Выбери, как оплачиваем 💰", "", `Сумма: <b>${escapeHtml(total)}</b>`, `Срок: <b>${planDays} дней</b>`, `Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`].join("\n");
 
-    const kb = new InlineKeyboard()
-      .text("₽ Рубли", `${flow}:do:yoo:${planDays}:${quote.selectedDeviceLimit}`)
-      .text("$ Крипта", `${flow}:do:cb:${planDays}:${quote.selectedDeviceLimit}`)
-      .row()
+    const hasYoo = deps.payments.isYooKassaEnabled();
+    const hasCb = deps.payments.isCryptoBotEnabled();
+    if (!hasYoo && !hasCb) {
+      await replyOrEdit(ctx, "Оплата сейчас недоступна. Попробуй позже или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const kb = new InlineKeyboard();
+    if (hasYoo) kb.text("₽ Рубли", `${flow}:do:yoo:${planDays}:${quote.selectedDeviceLimit}`);
+    if (hasCb) kb.text("$ Крипта", `${flow}:do:cb:${planDays}:${quote.selectedDeviceLimit}`);
+    kb.row()
       .text("🔙 Назад", `${flow}:cfg:${planDays}:${quote.selectedDeviceLimit}`)
       .row()
       .text("🏠 Главное меню", "nav:cabinet")

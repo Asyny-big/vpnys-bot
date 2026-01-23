@@ -108,6 +108,22 @@ export function loadEnv(): Env {
     throw new Error(`Only SQLite is supported. Set DATABASE_URL=file:./data.db (got: ${databaseUrl})`);
   }
 
+  const yookassaShopId = optional("YOOKASSA_SHOP_ID");
+  const yookassaSecretKey = optional("YOOKASSA_SECRET_KEY");
+  const cryptobotApiToken = optional("CRYPTOBOT_API_TOKEN");
+  const paymentsReturnUrl = optional("PAYMENTS_RETURN_URL");
+
+  const plan30RubMinor = asInt("PLAN_30_RUB_MINOR", process.env.PLAN_30_RUB_MINOR ?? "0");
+  const plan90RubMinor = asInt("PLAN_90_RUB_MINOR", process.env.PLAN_90_RUB_MINOR ?? "0");
+  const plan180RubMinor = asInt("PLAN_180_RUB_MINOR", process.env.PLAN_180_RUB_MINOR ?? "0");
+
+  const hasAnyPaymentProvider = (!!yookassaShopId && !!yookassaSecretKey) || !!cryptobotApiToken;
+  if (hasAnyPaymentProvider) {
+    if (plan30RubMinor <= 0) throw new Error(`PLAN_30_RUB_MINOR must be > 0 (got: ${plan30RubMinor})`);
+    if (plan90RubMinor <= 0) throw new Error(`PLAN_90_RUB_MINOR must be > 0 (got: ${plan90RubMinor})`);
+    if (plan180RubMinor <= 0) throw new Error(`PLAN_180_RUB_MINOR must be > 0 (got: ${plan180RubMinor})`);
+  }
+
   return {
     nodeEnv: nodeEnvRaw,
     logLevel,
@@ -130,15 +146,15 @@ export function loadEnv(): Env {
 
     webhookToken: required("WEBHOOK_TOKEN"),
 
-    yookassaShopId: optional("YOOKASSA_SHOP_ID"),
-    yookassaSecretKey: optional("YOOKASSA_SECRET_KEY"),
-    cryptobotApiToken: optional("CRYPTOBOT_API_TOKEN"),
+    yookassaShopId,
+    yookassaSecretKey,
+    cryptobotApiToken,
 
-    paymentsReturnUrl: optional("PAYMENTS_RETURN_URL"),
+    paymentsReturnUrl,
 
-    plan30RubMinor: asInt("PLAN_30_RUB_MINOR", process.env.PLAN_30_RUB_MINOR ?? "0"),
-    plan90RubMinor: asInt("PLAN_90_RUB_MINOR", process.env.PLAN_90_RUB_MINOR ?? "0"),
-    plan180RubMinor: asInt("PLAN_180_RUB_MINOR", process.env.PLAN_180_RUB_MINOR ?? "0"),
+    plan30RubMinor,
+    plan90RubMinor,
+    plan180RubMinor,
 
     cryptobotAsset: process.env.CRYPTOBOT_ASSET ?? "USDT",
     cryptobotPlan30Amount: optional("CRYPTOBOT_PLAN_30_AMOUNT"),

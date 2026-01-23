@@ -60,8 +60,7 @@ export class PaymentService {
     const user = await this.getUserOrThrow(params.telegramId);
     const subscription = await this.subscriptions.ensureForUser(user);
 
-    const baseRubMinor = this.deps.planRubMinorByDays[params.planDays];
-    if (!baseRubMinor) throw new Error(`Price is not configured for plan ${params.planDays}`);
+    const baseRubMinor = this.getPlanRubMinorOrThrow(params.planDays);
 
     const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
     const selectedDeviceLimit = clampDeviceLimit(Math.max(currentDeviceLimit, params.deviceLimit));
@@ -167,6 +166,22 @@ export class PaymentService {
     return PaymentService.bigIntToDecimal(total, scale);
   }
 
+  isYooKassaEnabled(): boolean {
+    return !!this.deps.yookassa;
+  }
+
+  isCryptoBotEnabled(): boolean {
+    return !!this.deps.cryptobot;
+  }
+
+  private getPlanRubMinorOrThrow(planDays: 30 | 90 | 180): number {
+    const value = this.deps.planRubMinorByDays[planDays];
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`PLAN_${planDays}_RUB_MINOR is not configured (got: ${String(value)})`);
+    }
+    return value;
+  }
+
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     await this.subscriptions.ensureForUser(user);
@@ -175,8 +190,7 @@ export class PaymentService {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
       if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
 
-      const amountMinor = this.deps.planRubMinorByDays[params.planDays];
-      if (!amountMinor) throw new Error(`Price is not configured for plan ${params.planDays}`);
+      const amountMinor = this.getPlanRubMinorOrThrow(params.planDays);
 
       const payment = await this.prisma.payment.create({
         data: {
