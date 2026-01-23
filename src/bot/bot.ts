@@ -183,30 +183,24 @@ export function buildBot(deps: BotDeps): Bot {
     const active = !!state.expiresAt && state.expiresAt.getTime() > Date.now() && state.enabled;
     const expires = active && state.expiresAt ? formatRuDayMonth(state.expiresAt) : "";
 
-    const url = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
-
     const text = [
       "💳 <b>Подписка</b>",
       "",
       active ? `✅ VPN работает до <b>${escapeHtml(expires)}</b>` : "🙈 Сейчас не активна",
       `📱 Устройства: <b>${escapeHtml(formatDevices(sub.deviceLimit))}</b>`,
-      "",
-      active ? "Ссылка для подключения 👇" : "Ссылка появится сразу после оплаты 👇",
-      active ? `<code>${escapeHtml(url)}</code>` : "",
     ]
       .filter(Boolean)
       .join("\n");
 
-    const kb = new InlineKeyboard();
-    if (active) {
-      kb.text("📋 Скопировать", "sub:copy")
-        .row()
-        .text("🧾 Инструкция", "nav:guide")
-        .row();
-    } else {
-      kb.text("💳 Оформить подписку", "nav:buy").row();
-    }
-    kb.text("🏠 Главное меню", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
+    const subUrl = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
+    const kb = new InlineKeyboard()
+      .url("🚀 Подключить VPN", subUrl)
+      .row()
+      .text("📄 Инструкция", "nav:guide")
+      .row()
+      .text("🏠 Главное меню", "nav:cabinet")
+      .row()
+      .add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
@@ -363,7 +357,7 @@ export function buildBot(deps: BotDeps): Bot {
       .row()
       .add(supportButton(deps));
 
-    await replyOrEdit(ctx, "🧾 Инструкция. Выбери устройство", { reply_markup: kb });
+    await replyOrEdit(ctx, "📄 Инструкция. Выбери устройство", { reply_markup: kb });
   };
 
   const showGuide = async (ctx: any, platform: "android" | "ios" | "desktop"): Promise<void> => {
@@ -372,26 +366,26 @@ export function buildBot(deps: BotDeps): Bot {
     const steps =
       platform === "android"
         ? [
-            "1. Установи Hiddify",
-            "2. Открой и выбери «Добавить подписку»",
-            "3. Вставь ссылку из раздела «💳 Подписка»",
-            "4. Нажми «Подключить»",
+            "1. В боте нажми «🚀 Подключить VPN»",
+            "2. Откроется подписка в панели",
+            "3. Выбери приложение (например, Hiddify) и открой подписку",
+            "4. Включи VPN",
           ]
         : platform === "ios"
           ? [
-              "1. Скачай Hiddify",
-              "2. Добавь подписку",
-              "3. Вставь ссылку из раздела «💳 Подписка»",
-              "4. Нажми «Подключить»",
+              "1. В боте нажми «🚀 Подключить VPN»",
+              "2. Откроется подписка в панели",
+              "3. Выбери приложение (например, Hiddify) и открой подписку",
+              "4. Включи VPN",
             ]
           : [
-              "1. Скачай Hiddify",
-              "2. Вставь ссылку из раздела «💳 Подписка»",
-              "3. Нажми «Подключить»",
-              "4. Готово",
+              "1. В боте нажми «🚀 Подключить VPN»",
+              "2. Откроется подписка в панели",
+              "3. Выбери приложение и добавь подписку",
+              "4. Включи VPN",
             ];
 
-    const text = [`🧾 <b>Инструкция. ${escapeHtml(title)}</b>`, "", ...steps, "", "Если что-то не так, жми Поддержка."].join("\n");
+    const text = [`📄 <b>Инструкция. ${escapeHtml(title)}</b>`, "", ...steps, "", "Если что-то не так, жми Поддержка."].join("\n");
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
@@ -563,10 +557,6 @@ export function buildBot(deps: BotDeps): Bot {
   bot.callbackQuery(/^guide:(android|ios|desktop)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
     await showGuide(ctx, ctx.match[1] as any);
-  });
-
-  bot.callbackQuery("sub:copy", async (ctx) => {
-    await ctx.answerCallbackQuery({ text: "Скопируй ссылку в сообщении", show_alert: false });
   });
 
   bot.catch((err) => {
