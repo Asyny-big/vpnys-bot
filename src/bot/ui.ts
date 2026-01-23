@@ -9,9 +9,9 @@ export function escapeHtml(input: string): string {
     .replaceAll("'", "&#039;");
 }
 
-export function formatRubMinor(amountMinor: number): string {
-  const rub = amountMinor / 100;
-  const formatted = rub.toFixed(2).replace(/\.00$/, "");
+export function formatRub(amountRub: number): string {
+  const normalized = Number.isFinite(amountRub) ? Math.trunc(amountRub) : 0;
+  const formatted = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(normalized);
   return `${formatted} ₽`;
 }
 

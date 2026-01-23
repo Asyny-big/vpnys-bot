@@ -9,7 +9,7 @@ import type { PaymentService } from "../modules/payments/paymentService";
 import { PaymentProvider } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
 import { formatRuDayMonth } from "../domain/humanDate";
-import { escapeHtml, formatDevices, formatRubMinor } from "./ui";
+import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 
 export type BotDeps = Readonly<{
@@ -307,8 +307,8 @@ export function buildBot(deps: BotDeps): Bot {
     const kb = new InlineKeyboard();
 
     if (quoted.canAdd) {
-      textLines.push(`Добавить ещё одно устройство — <b>${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`);
-      kb.text(`➕ Добавить за ${formatRubMinor(quoted.priceRubMinor)}`, "dev:pay").row();
+      textLines.push(`Добавить ещё одно устройство — <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`);
+      kb.text(`➕ Добавить за ${formatRub(quoted.priceRub)}`, "dev:pay").row();
     } else {
       textLines.push(`🚫 Сейчас максимум — ${MAX_DEVICE_LIMIT}.`);
     }
@@ -335,7 +335,7 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    const text = ["Выбери, как оплачиваем 💰", "", `+1 устройство — <b>${escapeHtml(formatRubMinor(quoted.priceRubMinor))}</b>`].join("\n");
+    const text = ["Выбери, как оплачиваем 💰", "", `+1 устройство — <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`].join("\n");
 
     const hasYoo = deps.payments.isYooKassaEnabled();
     const hasCb = deps.payments.isCryptoBotEnabled();
@@ -379,7 +379,7 @@ export function buildBot(deps: BotDeps): Bot {
     }
 
     const chosenDevices = quote.selectedDeviceLimit;
-    const total = formatRubMinor(quote.totalRubMinor);
+    const total = formatRub(quote.totalRub);
 
     const title = flow === CheckoutFlow.EXTEND ? "🔄 Продлеваем подписку" : "🦊 Оформляем подписку";
     const payLabel = flow === CheckoutFlow.EXTEND ? `Продлить за ${total}` : `Оплатить ${total}`;
@@ -431,7 +431,7 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    const total = formatRubMinor(quote.totalRubMinor);
+    const total = formatRub(quote.totalRub);
 
     const text = ["Выбери, как оплачиваем 💰", "", `Сумма: <b>${escapeHtml(total)}</b>`, `Срок: <b>${planDays} дней</b>`, `Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`].join("\n");
 

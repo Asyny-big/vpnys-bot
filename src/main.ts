@@ -39,18 +39,19 @@ async function main(): Promise<void> {
     yookassa,
     cryptobot,
     paymentsReturnUrl: env.paymentsReturnUrl,
-    planRubMinorByDays: {
-      30: env.plan30RubMinor,
-      90: env.plan90RubMinor,
-      180: env.plan180RubMinor,
+    planRubByDays: {
+      30: env.plan30Rub,
+      90: env.plan90Rub,
+      180: env.plan180Rub,
     },
     cryptobotAsset: env.cryptobotAsset,
-    cryptobotAmountByDays: {
-      30: env.cryptobotPlan30Amount,
-      90: env.cryptobotPlan90Amount,
-      180: env.cryptobotPlan180Amount,
+    rubToUsdtRate: env.rubToUsdtRate,
+    cryptobotPlanRubByDays: {
+      30: env.cryptobotPlan30Rub,
+      90: env.cryptobotPlan90Rub,
+      180: env.cryptobotPlan180Rub,
     },
-    cryptobotDeviceSlotAmount: env.cryptobotDeviceSlotAmount,
+    cryptobotDeviceSlotRub: env.cryptobotDeviceSlotRub,
   });
 
   const promos = new PromoService(prisma);

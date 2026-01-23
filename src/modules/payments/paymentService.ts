@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
-import { EXTRA_DEVICE_RUB_MINOR } from "../../domain/pricing";
+import { EXTRA_DEVICE_RUB } from "../../domain/pricing";
 import { formatRuDayMonth } from "../../domain/humanDate";
 import { formatRuDevices } from "../../domain/humanDevices";
 
@@ -42,10 +42,11 @@ export class PaymentService {
       yookassa?: YooKassaClient;
       cryptobot?: CryptoBotClient;
       paymentsReturnUrl?: string;
-      planRubMinorByDays: Record<30 | 90 | 180, number>;
+      planRubByDays: Record<30 | 90 | 180, number>;
       cryptobotAsset: string;
-      cryptobotAmountByDays: Partial<Record<30 | 90 | 180, string>>;
-      cryptobotDeviceSlotAmount?: string;
+      rubToUsdtRate?: number; // RUB per 1 USDT (e.g. 100 means 100 ₽ ≈ 1 USDT)
+      cryptobotPlanRubByDays?: Partial<Record<30 | 90 | 180, number>>; // optional override vs planRubByDays
+      cryptobotDeviceSlotRub?: number; // optional override vs EXTRA_DEVICE_RUB
     }>,
   ) {}
 
@@ -53,26 +54,26 @@ export class PaymentService {
     currentDeviceLimit: number;
     selectedDeviceLimit: number;
     maxDeviceLimit: number;
-    baseRubMinor: number;
-    extraDeviceRubMinor: number;
-    totalRubMinor: number;
+    baseRub: number;
+    extraDeviceRub: number;
+    totalRub: number;
   }> {
     const user = await this.getUserOrThrow(params.telegramId);
     const subscription = await this.subscriptions.ensureForUser(user);
 
-    const baseRubMinor = this.getPlanRubMinorOrThrow(params.planDays);
+    const baseRub = this.getPlanRubOrThrow(params.planDays);
 
     const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
     const selectedDeviceLimit = clampDeviceLimit(Math.max(currentDeviceLimit, params.deviceLimit));
-    const totalRubMinor = baseRubMinor + (selectedDeviceLimit - 1) * EXTRA_DEVICE_RUB_MINOR;
+    const totalRub = baseRub + (selectedDeviceLimit - 1) * EXTRA_DEVICE_RUB;
 
     return {
       currentDeviceLimit,
       selectedDeviceLimit,
       maxDeviceLimit: MAX_DEVICE_LIMIT,
-      baseRubMinor,
-      extraDeviceRubMinor: EXTRA_DEVICE_RUB_MINOR,
-      totalRubMinor,
+      baseRub,
+      extraDeviceRub: EXTRA_DEVICE_RUB,
+      totalRub,
     };
   }
 
@@ -80,7 +81,7 @@ export class PaymentService {
     currentDeviceLimit: number;
     maxDeviceLimit: number;
     canAdd: boolean;
-    priceRubMinor: number;
+    priceRub: number;
   }> {
     const user = await this.getUserOrThrow(params.telegramId);
     const subscription = await this.subscriptions.ensureForUser(user);
@@ -89,7 +90,7 @@ export class PaymentService {
       currentDeviceLimit,
       maxDeviceLimit: MAX_DEVICE_LIMIT,
       canAdd: currentDeviceLimit < MAX_DEVICE_LIMIT,
-      priceRubMinor: EXTRA_DEVICE_RUB_MINOR,
+      priceRub: EXTRA_DEVICE_RUB,
     };
   }
 
@@ -123,47 +124,19 @@ export class PaymentService {
     }
   }
 
-  private static decimalToBigInt(value: string, scale: number): bigint {
-    const trimmed = value.trim();
-    if (!trimmed.length) throw new Error("Empty amount");
-
-    const negative = trimmed.startsWith("-");
-    const unsigned = negative ? trimmed.slice(1) : trimmed;
-    const [whole, frac = ""] = unsigned.split(".");
-    const wholeDigits = whole.replace(/^0+(?=\d)/, "");
-    const fracPadded = (frac + "0".repeat(scale)).slice(0, scale);
-
-    if (!/^\d+$/.test(wholeDigits || "0") || !/^\d+$/.test(fracPadded || "0")) {
-      throw new Error(`Invalid decimal: ${value}`);
+  private computeUsdtAmountFromRub(rubAmount: number): string {
+    const rate = this.deps.rubToUsdtRate;
+    if (!Number.isFinite(rate) || !rate || rate <= 0) {
+      throw new Error("RUB_TO_USDT_RATE is not configured");
     }
 
-    const asBig = BigInt(wholeDigits || "0") * BigInt(10 ** scale) + BigInt(fracPadded || "0");
-    return negative ? -asBig : asBig;
-  }
+    const rub = Number.isFinite(rubAmount) ? Math.trunc(rubAmount) : 0;
+    if (rub <= 0) throw new Error(`RUB amount must be > 0 (got: ${String(rubAmount)})`);
 
-  private static bigIntToDecimal(value: bigint, scale: number): string {
-    const negative = value < 0n;
-    const abs = negative ? -value : value;
-    const base = 10n ** BigInt(scale);
-    const whole = abs / base;
-    const frac = abs % base;
-    const fracStr = frac.toString().padStart(scale, "0").replace(/0+$/, "");
-    const result = fracStr.length ? `${whole.toString()}.${fracStr}` : whole.toString();
-    return negative ? `-${result}` : result;
-  }
+    const raw = rub / rate;
+    if (!Number.isFinite(raw) || raw <= 0) throw new Error("Computed USDT amount must be > 0");
 
-  private computeCryptoAmount(params: { planDays: 30 | 90 | 180; deviceLimit: number }): string {
-    const base = this.deps.cryptobotAmountByDays[params.planDays];
-    if (!base) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_AMOUNT is not configured`);
-    const extra = this.deps.cryptobotDeviceSlotAmount;
-    if (!extra) throw new Error("CRYPTOBOT_DEVICE_SLOT_AMOUNT is not configured");
-
-    const deviceLimit = clampDeviceLimit(params.deviceLimit);
-    const scale = 8;
-    const baseInt = PaymentService.decimalToBigInt(base, scale);
-    const extraInt = PaymentService.decimalToBigInt(extra, scale);
-    const total = baseInt + BigInt(deviceLimit - 1) * extraInt;
-    return PaymentService.bigIntToDecimal(total, scale);
+    return raw.toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
   }
 
   isYooKassaEnabled(): boolean {
@@ -174,12 +147,12 @@ export class PaymentService {
     return !!this.deps.cryptobot;
   }
 
-  private getPlanRubMinorOrThrow(planDays: 30 | 90 | 180): number {
-    const value = this.deps.planRubMinorByDays[planDays];
+  private getPlanRubOrThrow(planDays: 30 | 90 | 180): number {
+    const value = this.deps.planRubByDays[planDays];
     if (!Number.isFinite(value) || value <= 0) {
-      throw new Error(`PLAN_${planDays}_RUB_MINOR is not configured (got: ${String(value)})`);
+      throw new Error(`PLAN_${planDays}_RUB is not configured (got: ${String(value)})`);
     }
-    return value;
+    return Math.trunc(value);
   }
 
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
@@ -190,7 +163,7 @@ export class PaymentService {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
       if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
 
-      const amountMinor = this.getPlanRubMinorOrThrow(params.planDays);
+      const amountRub = this.getPlanRubOrThrow(params.planDays);
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -200,14 +173,14 @@ export class PaymentService {
           type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
           deviceSlots: 0,
-          amountMinor,
+          amountRub,
           currency: "RUB",
           status: PaymentStatus.PENDING,
         },
       });
 
       const created = await this.deps.yookassa.createPayment({
-        amountRubMinor: amountMinor,
+        amountRub,
         description: `ЛисVPN — подписка на ${params.planDays} дней`,
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
@@ -225,8 +198,11 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
-      const amount = this.deps.cryptobotAmountByDays[params.planDays];
-      if (!amount) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_AMOUNT is not configured`);
+
+      const planRubRaw = this.deps.cryptobotPlanRubByDays?.[params.planDays] ?? this.getPlanRubOrThrow(params.planDays);
+      if (!Number.isFinite(planRubRaw) || planRubRaw <= 0) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_RUB is not configured`);
+      const planRub = Math.trunc(planRubRaw);
+      const amount = this.computeUsdtAmountFromRub(planRub);
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -236,7 +212,7 @@ export class PaymentService {
           type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
           deviceSlots: 0,
-          amountMinor: 0,
+          amountRub: planRub,
           currency: this.deps.cryptobotAsset,
           status: PaymentStatus.PENDING,
         },
@@ -285,7 +261,7 @@ export class PaymentService {
           type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
           deviceSlots,
-          amountMinor: quoted.totalRubMinor,
+          amountRub: quoted.totalRub,
           currency: "RUB",
           status: PaymentStatus.PENDING,
           targetDeviceLimit,
@@ -293,7 +269,7 @@ export class PaymentService {
       });
 
       const created = await this.deps.yookassa.createPayment({
-        amountRubMinor: quoted.totalRubMinor,
+        amountRub: quoted.totalRub,
         description: `ЛисVPN — подписка на ${params.planDays} дней, ${formatRuDevices(targetDeviceLimit)}`,
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
@@ -314,7 +290,8 @@ export class PaymentService {
     if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
 
-      const amount = this.computeCryptoAmount({ planDays: params.planDays, deviceLimit: targetDeviceLimit });
+      const totalRub = quoted.totalRub;
+      const amount = this.computeUsdtAmountFromRub(totalRub);
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -324,7 +301,7 @@ export class PaymentService {
           type: PaymentType.SUBSCRIPTION,
           planDays: params.planDays,
           deviceSlots,
-          amountMinor: 0,
+          amountRub: totalRub,
           currency: this.deps.cryptobotAsset,
           status: PaymentStatus.PENDING,
           targetDeviceLimit,
@@ -370,14 +347,14 @@ export class PaymentService {
           type: PaymentType.DEVICE_SLOT,
           planDays: 0,
           deviceSlots: 1,
-          amountMinor: EXTRA_DEVICE_RUB_MINOR,
+          amountRub: EXTRA_DEVICE_RUB,
           currency: "RUB",
           status: PaymentStatus.PENDING,
         },
       });
 
       const created = await this.deps.yookassa.createPayment({
-        amountRubMinor: EXTRA_DEVICE_RUB_MINOR,
+        amountRub: EXTRA_DEVICE_RUB,
         description: "ЛисVPN — ещё одно устройство",
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
@@ -395,8 +372,11 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
-      const amount = this.deps.cryptobotDeviceSlotAmount;
-      if (!amount) throw new Error("CRYPTOBOT_DEVICE_SLOT_AMOUNT is not configured");
+
+      const deviceSlotRubRaw = this.deps.cryptobotDeviceSlotRub ?? EXTRA_DEVICE_RUB;
+      if (!Number.isFinite(deviceSlotRubRaw) || deviceSlotRubRaw <= 0) throw new Error("CRYPTOBOT_DEVICE_SLOT_RUB is not configured");
+      const deviceSlotRub = Math.trunc(deviceSlotRubRaw);
+      const amount = this.computeUsdtAmountFromRub(deviceSlotRub);
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -406,7 +386,7 @@ export class PaymentService {
           type: PaymentType.DEVICE_SLOT,
           planDays: 0,
           deviceSlots: 1,
-          amountMinor: 0,
+          amountRub: deviceSlotRub,
           currency: this.deps.cryptobotAsset,
           status: PaymentStatus.PENDING,
         },

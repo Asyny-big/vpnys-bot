@@ -1,4 +1,5 @@
 import { URL } from "node:url";
+import { EXTRA_DEVICE_RUB } from "../domain/pricing";
 
 type Env = Readonly<{
   nodeEnv: "development" | "test" | "production";
@@ -29,15 +30,16 @@ type Env = Readonly<{
   cryptobotApiToken?: string;
   paymentsReturnUrl?: string;
 
-  plan30RubMinor: number;
-  plan90RubMinor: number;
-  plan180RubMinor: number;
+  plan30Rub: number;
+  plan90Rub: number;
+  plan180Rub: number;
 
   cryptobotAsset: string;
-  cryptobotPlan30Amount?: string;
-  cryptobotPlan90Amount?: string;
-  cryptobotPlan180Amount?: string;
-  cryptobotDeviceSlotAmount?: string;
+  rubToUsdtRate?: number; // RUB per 1 USDT (e.g. 100 means 100 ₽ ≈ 1 USDT)
+  cryptobotPlan30Rub?: number;
+  cryptobotPlan90Rub?: number;
+  cryptobotPlan180Rub?: number;
+  cryptobotDeviceSlotRub?: number;
 
   workerIntervalSeconds: number;
 }>;
@@ -66,6 +68,32 @@ function asInt(name: string, value: string): number {
   const parsed = Number.parseInt(value, 10);
   if (!Number.isFinite(parsed)) throw new Error(`Invalid int env ${name}: ${value}`);
   return parsed;
+}
+
+function asNumber(name: string, value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`Invalid number env ${name}: ${value}`);
+  return parsed;
+}
+
+function requirePositiveInt(name: string): number {
+  const value = asInt(name, required(name));
+  if (value <= 0) throw new Error(`${name} must be > 0 (got: ${value})`);
+  return value;
+}
+
+function optionalPositiveInt(name: string): number | undefined {
+  const raw = optional(name);
+  if (raw === undefined) return undefined;
+  const value = asInt(name, raw);
+  if (value <= 0) throw new Error(`${name} must be > 0 (got: ${value})`);
+  return value;
+}
+
+function requirePositiveNumber(name: string): number {
+  const value = asNumber(name, required(name));
+  if (value <= 0) throw new Error(`${name} must be > 0 (got: ${value})`);
+  return value;
 }
 
 function ensureUrl(name: string, value: string): string {
@@ -113,15 +141,29 @@ export function loadEnv(): Env {
   const cryptobotApiToken = optional("CRYPTOBOT_API_TOKEN");
   const paymentsReturnUrl = optional("PAYMENTS_RETURN_URL");
 
-  const plan30RubMinor = asInt("PLAN_30_RUB_MINOR", process.env.PLAN_30_RUB_MINOR ?? "0");
-  const plan90RubMinor = asInt("PLAN_90_RUB_MINOR", process.env.PLAN_90_RUB_MINOR ?? "0");
-  const plan180RubMinor = asInt("PLAN_180_RUB_MINOR", process.env.PLAN_180_RUB_MINOR ?? "0");
+  const plan30Rub = requirePositiveInt("PLAN_30_RUB");
+  const plan90Rub = requirePositiveInt("PLAN_90_RUB");
+  const plan180Rub = requirePositiveInt("PLAN_180_RUB");
 
-  const hasAnyPaymentProvider = (!!yookassaShopId && !!yookassaSecretKey) || !!cryptobotApiToken;
-  if (hasAnyPaymentProvider) {
-    if (plan30RubMinor <= 0) throw new Error(`PLAN_30_RUB_MINOR must be > 0 (got: ${plan30RubMinor})`);
-    if (plan90RubMinor <= 0) throw new Error(`PLAN_90_RUB_MINOR must be > 0 (got: ${plan90RubMinor})`);
-    if (plan180RubMinor <= 0) throw new Error(`PLAN_180_RUB_MINOR must be > 0 (got: ${plan180RubMinor})`);
+  const rubToUsdtRate = cryptobotApiToken ? requirePositiveNumber("RUB_TO_USDT_RATE") : undefined;
+  const cryptobotPlan30Rub = optionalPositiveInt("CRYPTOBOT_PLAN_30_RUB");
+  const cryptobotPlan90Rub = optionalPositiveInt("CRYPTOBOT_PLAN_90_RUB");
+  const cryptobotPlan180Rub = optionalPositiveInt("CRYPTOBOT_PLAN_180_RUB");
+  const cryptobotDeviceSlotRub = optionalPositiveInt("CRYPTOBOT_DEVICE_SLOT_RUB");
+
+  if (cryptobotApiToken) {
+    if (cryptobotPlan30Rub !== undefined && cryptobotPlan30Rub !== plan30Rub) {
+      throw new Error(`CRYPTOBOT_PLAN_30_RUB must equal PLAN_30_RUB (got: ${cryptobotPlan30Rub}, expected: ${plan30Rub})`);
+    }
+    if (cryptobotPlan90Rub !== undefined && cryptobotPlan90Rub !== plan90Rub) {
+      throw new Error(`CRYPTOBOT_PLAN_90_RUB must equal PLAN_90_RUB (got: ${cryptobotPlan90Rub}, expected: ${plan90Rub})`);
+    }
+    if (cryptobotPlan180Rub !== undefined && cryptobotPlan180Rub !== plan180Rub) {
+      throw new Error(`CRYPTOBOT_PLAN_180_RUB must equal PLAN_180_RUB (got: ${cryptobotPlan180Rub}, expected: ${plan180Rub})`);
+    }
+    if (cryptobotDeviceSlotRub !== undefined && cryptobotDeviceSlotRub !== EXTRA_DEVICE_RUB) {
+      throw new Error(`CRYPTOBOT_DEVICE_SLOT_RUB must be ${EXTRA_DEVICE_RUB} (got: ${cryptobotDeviceSlotRub})`);
+    }
   }
 
   return {
@@ -152,15 +194,16 @@ export function loadEnv(): Env {
 
     paymentsReturnUrl,
 
-    plan30RubMinor,
-    plan90RubMinor,
-    plan180RubMinor,
+    plan30Rub,
+    plan90Rub,
+    plan180Rub,
 
     cryptobotAsset: process.env.CRYPTOBOT_ASSET ?? "USDT",
-    cryptobotPlan30Amount: optional("CRYPTOBOT_PLAN_30_AMOUNT"),
-    cryptobotPlan90Amount: optional("CRYPTOBOT_PLAN_90_AMOUNT"),
-    cryptobotPlan180Amount: optional("CRYPTOBOT_PLAN_180_AMOUNT"),
-    cryptobotDeviceSlotAmount: optional("CRYPTOBOT_DEVICE_SLOT_AMOUNT"),
+    rubToUsdtRate,
+    cryptobotPlan30Rub,
+    cryptobotPlan90Rub,
+    cryptobotPlan180Rub,
+    cryptobotDeviceSlotRub,
 
     workerIntervalSeconds: asInt("WORKER_INTERVAL_SECONDS", process.env.WORKER_INTERVAL_SECONDS ?? "300")
   };

@@ -20,7 +20,7 @@ export type YooKassaClientOptions = Readonly<{
 }>;
 
 export type YooKassaCreatePayment = Readonly<{
-  amountRubMinor: number;
+  amountRub: number;
   description: string;
   returnUrl: string;
   idempotenceKey?: string;
@@ -49,9 +49,9 @@ export class YooKassaClient {
   }
 
   async createPayment(input: YooKassaCreatePayment): Promise<YooKassaCreatePaymentResult> {
-    if (input.amountRubMinor <= 0) throw new YooKassaError("YooKassa amount must be > 0");
+    if (input.amountRub <= 0) throw new YooKassaError("YooKassa amount must be > 0");
 
-    const amountValue = (input.amountRubMinor / 100).toFixed(2);
+    const amountValue = `${Math.trunc(input.amountRub)}.00`;
     const idempotenceKey = input.idempotenceKey ?? randomUUID();
 
     const controller = new AbortController();
