@@ -6,7 +6,7 @@ import { MAIN_KEYBOARD } from "./keyboard";
 import type { OnboardingService } from "../modules/onboarding/onboardingService";
 import type { SubscriptionService } from "../modules/subscription/subscriptionService";
 import type { PaymentService } from "../modules/payments/paymentService";
-import { PaymentProvider } from "../db/values";
+import { PaymentProvider, PaymentStatus } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
 import { formatRuDateTime, formatRuDayMonth } from "../domain/humanDate";
 import { isOfferAccepted, shortPublicOfferText } from "../domain/offer";
@@ -601,12 +601,31 @@ export function buildBot(deps: BotDeps): Bot {
     const telegramId = String(ctx.from.id);
 
     await showOfferOnceAndRecord(ctx, telegramId);
+
+    const startParam = typeof (ctx as any).match === "string" ? String((ctx as any).match).trim() : "";
+    let paymentSyncStatus: "not_found" | "not_configured" | PaymentStatus | undefined;
+    if (startParam.startsWith("pay_")) {
+      const paymentId = startParam.slice("pay_".length).trim();
+      if (paymentId.length) {
+        try {
+          const synced = await deps.payments.syncReturnPayment({ telegramId, paymentId });
+          paymentSyncStatus = synced.status;
+        } catch {
+          // ignore
+        }
+      }
+    }
+
     const result = await deps.onboarding.handleStart(telegramId);
 
     const now = Date.now();
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
 
     const extraLines: string[] = [];
+    if (paymentSyncStatus === PaymentStatus.SUCCEEDED) extraLines.push("✅ Оплата подтверждена.");
+    if (paymentSyncStatus === PaymentStatus.CANCELED) extraLines.push("❌ Платёж отменён.");
+    if (paymentSyncStatus === PaymentStatus.PENDING) extraLines.push("⏳ Оплата обрабатывается. Если ты оплатил, подожди пару минут.");
+    if (paymentSyncStatus === "not_configured") extraLines.push("ℹ️ Проверка оплаты недоступна. Я включу VPN, как только получу уведомление.");
     if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
     if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
 

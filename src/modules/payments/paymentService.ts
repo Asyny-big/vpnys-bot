@@ -3,6 +3,7 @@ import { SubscriptionService } from "../subscription/subscriptionService";
 import { YooKassaClient } from "../../integrations/yookassa/yooKassaClient";
 import { CryptoBotClient } from "../../integrations/cryptobot/cryptoBotClient";
 import { randomUUID } from "node:crypto";
+import { URL } from "node:url";
 import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
@@ -32,6 +33,10 @@ export type CreateSubscriptionCheckoutParams = Readonly<{
 export type CreateCheckoutResult = Readonly<{
   payUrl: string;
   providerPaymentId: string;
+}>;
+
+export type SyncReturnPaymentResult = Readonly<{
+  status: "not_found" | "not_configured" | PaymentStatus;
 }>;
 
 const YOOKASSA_RETURN_URL = "https://t.me/lisvpnapp_bot";
@@ -165,14 +170,71 @@ export class PaymentService {
     return Math.trunc(value);
   }
 
+  private buildYooKassaReturnUrl(paymentId: string): string {
+    const base = this.deps.paymentsReturnUrl ?? YOOKASSA_RETURN_URL;
+    try {
+      const url = new URL(base);
+      const host = url.hostname.toLowerCase();
+      const isTelegram = host === "t.me" || host === "telegram.me";
+
+      if (isTelegram) {
+        if (!url.searchParams.has("start")) url.searchParams.set("start", `pay_${paymentId}`);
+        return url.toString();
+      }
+
+      if (!url.searchParams.has("paymentId")) url.searchParams.set("paymentId", paymentId);
+      return url.toString();
+    } catch {
+      return base;
+    }
+  }
+
+  async syncReturnPayment(params: { telegramId: string; paymentId: string }): Promise<SyncReturnPaymentResult> {
+    const user = await this.prisma.user.findUnique({ where: { telegramId: params.telegramId } });
+    if (!user) return { status: "not_found" };
+
+    const payment = await this.prisma.payment.findUnique({ where: { id: params.paymentId } });
+    if (!payment) return { status: "not_found" };
+    if (payment.userId !== user.id) return { status: "not_found" };
+
+    const currentStatus = payment.status as PaymentStatus;
+    if (currentStatus !== PaymentStatus.PENDING) return { status: currentStatus };
+
+    if (payment.provider !== PaymentProvider.YOOKASSA) return { status: currentStatus };
+    if (!this.deps.yookassa) return { status: "not_configured" };
+
+    const providerPaymentId = payment.providerPaymentId;
+    if (!providerPaymentId || providerPaymentId.startsWith("pending_")) return { status: currentStatus };
+
+    const remote = await this.deps.yookassa.getPayment(providerPaymentId);
+    const rawWebhook = this.toJsonString({ source: "return_sync", remote });
+
+    if (remote.status === "succeeded") {
+      await this.prisma.payment.updateMany({
+        where: { id: payment.id, status: PaymentStatus.PENDING },
+        data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook },
+      });
+      await this.applyPaymentEffect(payment.id, rawWebhook, { notify: false });
+      return { status: PaymentStatus.SUCCEEDED };
+    }
+
+    if (remote.status === "canceled") {
+      await this.prisma.payment.updateMany({
+        where: { id: payment.id, status: PaymentStatus.PENDING },
+        data: { status: PaymentStatus.CANCELED, rawWebhook },
+      });
+      return { status: PaymentStatus.CANCELED };
+    }
+
+    return { status: currentStatus };
+  }
+
   async createCheckout(params: CreateCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     await this.subscriptions.ensureForUser(user);
 
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
-      this.requireOfferAccepted(user);
-      this.requireOfferAccepted(user);
       this.requireOfferAccepted(user);
 
       const amountRub = this.getPlanRubOrThrow(params.planDays);
@@ -194,7 +256,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.buildYooKassaReturnUrl(payment.id),
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: String(params.planDays) },
       });
@@ -282,7 +344,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: quoted.totalRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.buildYooKassaReturnUrl(payment.id),
         idempotenceKey: payment.id,
         metadata: {
           userId: user.id,
@@ -366,7 +428,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: EXTRA_DEVICE_RUB,
         description: safeYooKassaDescription(30),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.buildYooKassaReturnUrl(payment.id),
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
       });
@@ -420,7 +482,7 @@ export class PaymentService {
     throw new Error("Unsupported provider");
   }
 
-  private async applyPaymentEffect(paymentId: string, rawWebhook: unknown): Promise<void> {
+  private async applyPaymentEffect(paymentId: string, rawWebhook: unknown, opts?: { notify?: boolean }): Promise<void> {
     const claim = await this.prisma.payment.updateMany({
       where: { id: paymentId, appliedAt: null, processingAt: null },
       data: { processingAt: new Date() },
@@ -464,7 +526,9 @@ export class PaymentService {
           await this.subscriptions.ensureDeviceLimit(payment.userId, payment.targetDeviceLimit);
         }
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
+        if (opts?.notify !== false) {
         await this.notifyTelegram(user.telegramId, `✅ Оплата прошла! VPN работает до ${formatRuDateTime(targetExpiresAt)}`);
+        }
         return;
       }
 
@@ -495,7 +559,9 @@ export class PaymentService {
 
         const ensured = await this.subscriptions.ensureDeviceLimit(payment.userId, targetDeviceLimit);
         await this.prisma.payment.update({ where: { id: payment.id }, data: { appliedAt: new Date(), processingAt: null, rawWebhook: this.toJsonString(rawWebhook) } });
+        if (opts?.notify !== false) {
         await this.notifyTelegram(user.telegramId, `✅ Готово! Теперь можно подключить ${formatRuDevices(ensured.deviceLimit)}.`);
+        }
         return;
       }
     } finally {

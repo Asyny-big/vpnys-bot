@@ -33,6 +33,12 @@ export type YooKassaCreatePaymentResult = Readonly<{
   confirmationUrl?: string;
 }>;
 
+export type YooKassaGetPaymentResult = Readonly<{
+  id: string;
+  status: string;
+  paid: boolean;
+}>;
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -100,6 +106,43 @@ export class YooKassaClient {
         status,
         confirmationUrl,
       };
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async getPayment(paymentId: string): Promise<YooKassaGetPaymentResult> {
+    if (!paymentId?.trim().length) throw new YooKassaError("YooKassa paymentId is required");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
+    try {
+      const response = await fetch(`${this.baseUrl}/v3/payments/${encodeURIComponent(paymentId)}`, {
+        method: "GET",
+        signal: controller.signal,
+        headers: {
+          authorization: this.authHeader,
+          "content-type": "application/json",
+        },
+      });
+
+      const json = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new YooKassaError(`YooKassa HTTP ${response.status}`, { status: response.status, details: json });
+      }
+
+      if (!isRecord(json)) {
+        throw new YooKassaError("YooKassa response invalid JSON shape", { details: json });
+      }
+
+      const id = json["id"];
+      const status = json["status"];
+      const paid = json["paid"];
+      if (typeof id !== "string" || typeof status !== "string" || typeof paid !== "boolean") {
+        throw new YooKassaError("YooKassa response missing id/status/paid", { details: json });
+      }
+
+      return { id, status, paid };
     } finally {
       clearTimeout(timeout);
     }
