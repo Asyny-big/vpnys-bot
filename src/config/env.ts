@@ -144,11 +144,7 @@ export function loadEnv(): Env {
   const yookassaShopId = optional("YOOKASSA_SHOP_ID");
   const yookassaSecretKey = optional("YOOKASSA_SECRET_KEY");
   const cryptobotApiToken = optional("CRYPTOBOT_API_TOKEN");
-  const paymentsReturnUrlRaw = optional("PAYMENTS_RETURN_URL");
-  const paymentsReturnUrl = paymentsReturnUrlRaw ? ensureUrl("PAYMENTS_RETURN_URL", paymentsReturnUrlRaw) : undefined;
-  if (yookassaShopId && yookassaSecretKey && !paymentsReturnUrl) {
-    throw new Error("PAYMENTS_RETURN_URL is required when YooKassa is configured");
-  }
+  const paymentsReturnUrl = optional("PAYMENTS_RETURN_URL");
 
   const plan30Rub = requirePositiveInt("PLAN_30_RUB");
   const plan90Rub = requirePositiveInt("PLAN_90_RUB");
