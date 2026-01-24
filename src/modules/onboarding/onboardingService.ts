@@ -2,9 +2,11 @@ import type { PrismaClient, User } from "@prisma/client";
 import { addDays } from "../../utils/time";
 import { SubscriptionService } from "../subscription/subscriptionService";
 import { PaymentStatus } from "../../db/values";
+import { isOfferAccepted } from "../../domain/offer";
 
 export type StartResult = Readonly<{
   user: User;
+  isOfferAccepted: boolean;
   isTrialGrantedNow: boolean;
   subscriptionUrl: string;
   expiresAt?: Date;
@@ -16,6 +18,7 @@ export class OnboardingService {
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
     private readonly publicPanelBaseUrl: string,
+    private readonly deps: Readonly<{ offerVersion: string }>,
   ) {}
 
   async handleStart(telegramId: string): Promise<StartResult> {
@@ -26,6 +29,7 @@ export class OnboardingService {
     });
 
     const state = await this.subscriptions.syncFromXui(user);
+    const offerOk = isOfferAccepted(user as any, this.deps.offerVersion);
 
     const hasSucceededPayment = await this.prisma.payment.findFirst({
       where: { userId: user.id, status: PaymentStatus.SUCCEEDED },
@@ -38,7 +42,7 @@ export class OnboardingService {
         ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
         : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
     const canGrantTrial =
-      !user.trialGrantedAt && !hasSucceededPayment && (!effectiveExpiresAt || effectiveExpiresAt.getTime() <= now.getTime());
+      offerOk && !user.trialGrantedAt && !hasSucceededPayment && (!effectiveExpiresAt || effectiveExpiresAt.getTime() <= now.getTime());
 
     let isTrialGrantedNow = false;
     let finalState = state;
@@ -71,6 +75,7 @@ export class OnboardingService {
 
     return {
       user,
+      isOfferAccepted: offerOk,
       isTrialGrantedNow,
       subscriptionUrl: this.subscriptions.subscriptionUrl(this.publicPanelBaseUrl, finalState.subscription.xuiSubscriptionId),
       expiresAt: returnExpiresAt,

@@ -9,6 +9,7 @@ import type { PaymentService } from "../modules/payments/paymentService";
 import { PaymentProvider } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
 import { formatRuDateTime, formatRuDayMonth } from "../domain/humanDate";
+import { isOfferAccepted } from "../domain/offer";
 import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 
@@ -20,6 +21,8 @@ export type BotDeps = Readonly<{
   payments: PaymentService;
   promos: PromoService;
   publicPanelBaseUrl: string;
+  offerUrl: string;
+  offerVersion: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
 }>;
@@ -50,6 +53,10 @@ function supportButton(deps: BotDeps, label = "🆘 Поддержка"): Inline
 
 function backToCabinetKeyboard(deps: BotDeps): InlineKeyboard {
   return new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps));
+}
+
+function offerUrlButton(deps: BotDeps): InlineKeyboardButton {
+  return { text: "📄 Оферта", url: deps.offerUrl };
 }
 
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
@@ -244,6 +251,7 @@ export function buildBot(deps: BotDeps): Bot {
 
     kb.text("📱 Устройства", "nav:devices").text("💳 Подписка", "nav:sub").row();
     kb.text("🎁 Ввести промокод", "nav:promo").row();
+    kb.text("📄 Оферта", "nav:offer").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
@@ -278,6 +286,7 @@ export function buildBot(deps: BotDeps): Bot {
     const kb = new InlineKeyboard().url("🚀 Подключить VPN", subUrl).row();
     if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
     kb.text("📄 Инструкция", "nav:guide")
+      .text("📄 Оферта", "nav:offer")
       .row()
       .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
@@ -475,6 +484,10 @@ export function buildBot(deps: BotDeps): Bot {
 
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
+      if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
+        await showOffer(ctx, { acceptNext: `${flow}:do:${providerRaw}:${planDays}:${deviceLimit}` });
+        return;
+      }
       // eslint-disable-next-line no-console
       console.error("createSubscriptionCheckout failed", e);
       await replyOrEdit(ctx, "Не получилось создать оплату. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });
@@ -539,6 +552,101 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
+  const showOffer = async (ctx: any, opts?: { acceptNext?: string }): Promise<void> => {
+    if (!ctx.from?.id) return;
+    const telegramId = String(ctx.from.id);
+
+    const user = await deps.prisma.user.upsert({
+      where: { telegramId },
+      create: { telegramId },
+      update: {},
+    });
+
+    const accepted = isOfferAccepted(user as any, deps.offerVersion);
+    const acceptedAt = accepted && user.offerAcceptedAt ? formatRuDateTime(user.offerAcceptedAt) : "";
+
+    const text = [
+      "📄 <b>Публичная оферта</b>",
+      "",
+      `Версия: <code>${escapeHtml(deps.offerVersion)}</code>`,
+      accepted ? `Статус: ✅ принята ${escapeHtml(acceptedAt)}` : "Статус: ❌ не принята",
+      "",
+      `Ссылка: ${escapeHtml(deps.offerUrl)}`,
+      "",
+      accepted ? "" : "Нажимая «✅ Принять оферту», вы подтверждаете акцепт публичной оферты.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    const kb = new InlineKeyboard().add(offerUrlButton(deps));
+    if (!accepted) {
+      const next = opts?.acceptNext;
+      kb.row().text("✅ Принять оферту", next ? `offer:accept:${next}` : "offer:accept");
+    }
+    kb.row().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps));
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const acceptOffer = async (ctx: any, next?: string): Promise<void> => {
+    if (!ctx.from?.id) return;
+    const telegramId = String(ctx.from.id);
+    const now = new Date();
+
+    const user = await deps.prisma.user.findUnique({ where: { telegramId } });
+    if (!user) {
+      await deps.prisma.user.create({
+        data: { telegramId, offerAcceptedAt: now, offerVersion: deps.offerVersion },
+      });
+    } else if (!isOfferAccepted(user as any, deps.offerVersion)) {
+      await deps.prisma.user.update({
+        where: { id: user.id },
+        data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
+      });
+    }
+
+    if (next === "start") {
+      const result = await deps.onboarding.handleStart(telegramId);
+      const nowMs = Date.now();
+      const active = !!result.expiresAt && result.expiresAt.getTime() > nowMs && result.enabled;
+
+      const extraLines: string[] = [];
+      if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
+      if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
+
+      await sendStartScreen(ctx, buildStartCaption(extraLines));
+      return;
+    }
+
+    if (typeof next === "string") {
+      const sub = /^(buy|ext):do:(yoo|cb):(30|90|180):(\d+)$/.exec(next);
+      if (sub) {
+        const flow = sub[1] === "buy" ? CheckoutFlow.BUY : CheckoutFlow.EXTEND;
+        const providerRaw = sub[2] as "yoo" | "cb";
+        const planDays = Number(sub[3]) as 30 | 90 | 180;
+        const deviceLimit = Number(sub[4]);
+        await startSubscriptionCheckout(ctx, flow, providerRaw, planDays, deviceLimit);
+        return;
+      }
+
+      const dev = /^dev:do:(yoo|cb)$/.exec(next);
+      if (dev) {
+        const providerRaw = dev[1];
+        const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
+        const created = await deps.payments.createDeviceSlotCheckout({
+          telegramId,
+          provider,
+        });
+        const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты устройств станет больше автоматически."]
+          .join("\n");
+        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+        return;
+      }
+    }
+
+    await showOffer(ctx);
+  };
+
   bot.command("start", async (ctx) => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
@@ -549,10 +657,15 @@ export function buildBot(deps: BotDeps): Bot {
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
 
     const extraLines: string[] = [];
+    if (!result.isOfferAccepted) extraLines.push("📄 Для триала, промокодов и оплаты нужно принять оферту: /offer");
     if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
     if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
 
     await sendStartScreen(ctx, buildStartCaption(extraLines));
+  });
+
+  bot.command("offer", async (ctx) => {
+    await showOffer(ctx, { acceptNext: "start" });
   });
 
   bot.command("promo", async (ctx) => {
@@ -568,6 +681,23 @@ export function buildBot(deps: BotDeps): Bot {
     }
 
     const result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+    if (result.status === "offer_required") {
+      const text = [
+        "📄 Перед применением промокода нужно принять публичную оферту.",
+        "",
+        "Открой оферту и нажми «✅ Принять оферту». Затем повтори команду /promo.",
+      ].join("\n");
+      const kb = new InlineKeyboard()
+        .add(offerUrlButton(deps))
+        .row()
+        .text("✅ Принять оферту", "offer:accept")
+        .row()
+        .text("🏠 Личный кабинет", "nav:cabinet")
+        .row()
+        .add(supportButton(deps, "🆘 Поддержка"));
+      await replyOrEdit(ctx, text, { reply_markup: kb });
+      return;
+    }
     if (result.status === "not_found") {
       await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
       return;
@@ -669,6 +799,9 @@ export function buildBot(deps: BotDeps): Bot {
   bot.hears("🏠 Личный кабинет", showCabinet);
   bot.hears("📱 Устройства", showDevices);
   bot.hears("💳 Подписка", showMySubscription);
+  bot.hears("📄 Оферта", async (ctx) => {
+    await showOffer(ctx);
+  });
   bot.hears("🆘 Поддержка", showSupport);
 
   bot.callbackQuery("nav:cabinet", async (ctx) => {
@@ -691,6 +824,10 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     await showGuideMenu(ctx);
   });
+  bot.callbackQuery("nav:offer", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showOffer(ctx);
+  });
   bot.callbackQuery("nav:support", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showSupport(ctx);
@@ -706,6 +843,12 @@ export function buildBot(deps: BotDeps): Bot {
       "Пример: <code>/promo PARTNER2026</code>",
     ].join("\n");
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+  });
+
+  bot.callbackQuery(/^offer:accept(?::(.+))?$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const next = ctx.match?.[1] ? String(ctx.match[1]) : undefined;
+    await acceptOffer(ctx, next);
   });
 
   bot.callbackQuery(/^buy:cfg:(30|90|180):(\d+)$/, async (ctx) => {
@@ -812,6 +955,10 @@ export function buildBot(deps: BotDeps): Bot {
 
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
+      if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
+        await showOffer(ctx, { acceptNext: `dev:do:${providerRaw}` });
+        return;
+      }
       // eslint-disable-next-line no-console
       console.error("createDeviceSlotCheckout failed", e);
       await replyOrEdit(ctx, "Не получилось создать оплату. Попробуй ещё раз или напиши в поддержку.", { reply_markup: backToCabinetKeyboard(deps) });

@@ -1,5 +1,6 @@
 import type { PrismaClient, PromoCode } from "@prisma/client";
 import { addDays } from "../../utils/time";
+import { isOfferAccepted } from "../../domain/offer";
 
 export type AddPromoParams = Readonly<{
   code: string;
@@ -10,6 +11,7 @@ export type AddPromoParams = Readonly<{
 
 export type ApplyPromoResult =
   | Readonly<{ status: "applied"; promo: PromoCode; paidUntil: Date }>
+  | Readonly<{ status: "offer_required" }>
   | Readonly<{ status: "not_found" }>
   | Readonly<{ status: "expired"; promo: PromoCode }>
   | Readonly<{ status: "exhausted"; promo: PromoCode }>
@@ -27,7 +29,10 @@ function normalizePromoCode(raw: string): string {
 }
 
 export class PromoService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(
+    private readonly prisma: PrismaClient,
+    private readonly deps: Readonly<{ offerVersion: string }>,
+  ) {}
 
   normalize(code: string): string {
     return normalizePromoCode(code);
@@ -66,6 +71,13 @@ export class PromoService {
     if (!code.length) throw new Error("Empty promo code");
 
     const now = new Date();
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: params.userId },
+      select: { offerAcceptedAt: true, offerVersion: true },
+    });
+    if (!user) throw new Error("User not found");
+    if (!isOfferAccepted(user as any, this.deps.offerVersion)) return { status: "offer_required" };
 
     try {
       return await this.prisma.$transaction(async (tx) => {

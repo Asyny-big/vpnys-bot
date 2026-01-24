@@ -26,7 +26,7 @@ async function main(): Promise<void> {
   const xui = new ThreeXUiService(xuiApi);
 
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
-  const onboarding = new OnboardingService(prisma, subscriptions, env.publicPanelBaseUrl);
+  const onboarding = new OnboardingService(prisma, subscriptions, env.publicPanelBaseUrl, { offerVersion: env.offerVersion });
 
   const yookassa =
     env.yookassaShopId && env.yookassaSecretKey
@@ -39,6 +39,7 @@ async function main(): Promise<void> {
     yookassa,
     cryptobot,
     paymentsReturnUrl: env.paymentsReturnUrl,
+    offerVersion: env.offerVersion,
     planRubByDays: {
       30: env.plan30Rub,
       90: env.plan90Rub,
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
     cryptobotDeviceSlotRub: env.cryptobotDeviceSlotRub,
   });
 
-  const promos = new PromoService(prisma);
+  const promos = new PromoService(prisma, { offerVersion: env.offerVersion });
 
   const bot = buildBot({
     botToken: env.telegramBotToken,
@@ -64,6 +65,8 @@ async function main(): Promise<void> {
     payments,
     promos,
     publicPanelBaseUrl: env.publicPanelBaseUrl,
+    offerUrl: env.offerUrl,
+    offerVersion: env.offerVersion,
     adminUsername: env.adminUsername,
     adminUserIds: env.adminUserIds,
   });

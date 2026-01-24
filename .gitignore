@@ -4,8 +4,6 @@ dist
 .env.*
 !.env.example
 
-prisma/migrations
-
 *.log
 
 # SQLite database files

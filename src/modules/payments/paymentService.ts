@@ -9,6 +9,7 @@ import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 import { EXTRA_DEVICE_RUB } from "../../domain/pricing";
 import { formatRuDateTime } from "../../domain/humanDate";
 import { formatRuDevices } from "../../domain/humanDevices";
+import { OfferNotAcceptedError, isOfferAccepted, safeYooKassaDescription } from "../../domain/offer";
 
 export type CreateCheckoutParams = Readonly<{
   telegramId: string;
@@ -42,6 +43,7 @@ export class PaymentService {
       yookassa?: YooKassaClient;
       cryptobot?: CryptoBotClient;
       paymentsReturnUrl?: string;
+      offerVersion: string;
       planRubByDays: Record<30 | 90 | 180, number>;
       cryptobotAsset: string;
       rubToUsdtRate?: number; // RUB per 1 USDT (e.g. 100 means 100 ₽ ≈ 1 USDT)
@@ -98,6 +100,12 @@ export class PaymentService {
     const user = await this.prisma.user.findUnique({ where: { telegramId } });
     if (!user) throw new Error("User not found. Require /start first.");
     return user;
+  }
+
+  private requireOfferAccepted(user: User): void {
+    if (!isOfferAccepted(user as any, this.deps.offerVersion)) {
+      throw new OfferNotAcceptedError();
+    }
   }
 
   private toJsonString(value: unknown): string | null {
@@ -162,6 +170,9 @@ export class PaymentService {
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
       if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
+      this.requireOfferAccepted(user);
+      this.requireOfferAccepted(user);
+      this.requireOfferAccepted(user);
 
       const amountRub = this.getPlanRubOrThrow(params.planDays);
 
@@ -181,7 +192,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRub,
-        description: `ЛисVPN — подписка на ${params.planDays} дней`,
+        description: safeYooKassaDescription(params.planDays),
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: String(params.planDays) },
@@ -270,7 +281,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRub: quoted.totalRub,
-        description: `ЛисVPN — подписка на ${params.planDays} дней, ${formatRuDevices(targetDeviceLimit)}`,
+        description: safeYooKassaDescription(params.planDays),
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: {
@@ -355,7 +366,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRub: EXTRA_DEVICE_RUB,
-        description: "ЛисVPN — ещё одно устройство",
+        description: safeYooKassaDescription(30),
         returnUrl: this.deps.paymentsReturnUrl,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
@@ -421,6 +432,7 @@ export class PaymentService {
       const payment = await this.prisma.payment.findUnique({ where: { id: paymentId } });
       if (!payment) return;
       if (payment.appliedAt) return;
+      if (payment.status !== PaymentStatus.SUCCEEDED) return;
 
       const user = await this.prisma.user.findUnique({ where: { id: payment.userId } });
       if (!user) return;
@@ -508,6 +520,14 @@ export class PaymentService {
         ? await this.prisma.payment.findFirst({ where: { id: metadataPaymentId, provider: PaymentProvider.YOOKASSA } })
         : null);
     if (!payment) return;
+
+    // Webhook may arrive before providerPaymentId is persisted after createPayment().
+    if (payment.providerPaymentId !== paymentId && payment.providerPaymentId.startsWith("pending_")) {
+      await this.prisma.payment.updateMany({
+        where: { id: payment.id, provider: PaymentProvider.YOOKASSA, providerPaymentId: { startsWith: "pending_" } },
+        data: { providerPaymentId: paymentId },
+      });
+    }
 
     const rawWebhook = this.toJsonString(event);
     await this.prisma.payment.updateMany({
