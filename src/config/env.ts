@@ -16,7 +16,6 @@ type Env = Readonly<{
   // What users receive in /sub/<subscription_id> URL (can be public host / reverse proxy).
   publicPanelBaseUrl: string;
 
-  offerUrl: string;
   offerVersion: string;
 
   // Must be localhost-only for security.
@@ -139,7 +138,6 @@ export function loadEnv(): Env {
     throw new Error(`Only SQLite is supported. Set DATABASE_URL=file:./data.db (got: ${databaseUrl})`);
   }
 
-  const offerUrl = ensureUrl("OFFER_URL", required("OFFER_URL"));
   const offerVersion = required("OFFER_VERSION").trim();
   if (!offerVersion.length) throw new Error("OFFER_VERSION must be non-empty");
 
@@ -187,7 +185,6 @@ export function loadEnv(): Env {
 
     publicPanelBaseUrl: ensureUrl("PUBLIC_PANEL_BASE_URL", required("PUBLIC_PANEL_BASE_URL")),
 
-    offerUrl,
     offerVersion,
 
     xuiBaseUrl,

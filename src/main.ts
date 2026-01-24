@@ -65,7 +65,6 @@ async function main(): Promise<void> {
     payments,
     promos,
     publicPanelBaseUrl: env.publicPanelBaseUrl,
-    offerUrl: env.offerUrl,
     offerVersion: env.offerVersion,
     adminUsername: env.adminUsername,
     adminUserIds: env.adminUserIds,

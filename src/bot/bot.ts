@@ -9,7 +9,7 @@ import type { PaymentService } from "../modules/payments/paymentService";
 import { PaymentProvider } from "../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT } from "../domain/deviceLimits";
 import { formatRuDateTime, formatRuDayMonth } from "../domain/humanDate";
-import { isOfferAccepted } from "../domain/offer";
+import { isOfferAccepted, shortPublicOfferText } from "../domain/offer";
 import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 
@@ -21,7 +21,6 @@ export type BotDeps = Readonly<{
   payments: PaymentService;
   promos: PromoService;
   publicPanelBaseUrl: string;
-  offerUrl: string;
   offerVersion: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
@@ -53,10 +52,6 @@ function supportButton(deps: BotDeps, label = "🆘 Поддержка"): Inline
 
 function backToCabinetKeyboard(deps: BotDeps): InlineKeyboard {
   return new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps));
-}
-
-function offerUrlButton(deps: BotDeps): InlineKeyboardButton {
-  return { text: "📄 Оферта", url: deps.offerUrl };
 }
 
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
@@ -485,7 +480,16 @@ export function buildBot(deps: BotDeps): Bot {
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
       if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
-        await showOffer(ctx, { acceptNext: `${flow}:do:${providerRaw}:${planDays}:${deviceLimit}` });
+        await showOfferOnceAndRecord(ctx, String(ctx.from.id));
+        const created = await deps.payments.createSubscriptionCheckout({
+          telegramId: String(ctx.from.id),
+          provider,
+          planDays,
+          deviceLimit,
+        });
+        const text = ["Почти всё 👌", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я сам всё включу."]
+          .join("\n");
+        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
         return;
       }
       // eslint-disable-next-line no-console
@@ -552,112 +556,57 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
-  const showOffer = async (ctx: any, opts?: { acceptNext?: string }): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
-
-    const user = await deps.prisma.user.upsert({
-      where: { telegramId },
-      create: { telegramId },
-      update: {},
-    });
-
-    const accepted = isOfferAccepted(user as any, deps.offerVersion);
-    const acceptedAt = accepted && user.offerAcceptedAt ? formatRuDateTime(user.offerAcceptedAt) : "";
-
-    const text = [
-      "📄 <b>Публичная оферта</b>",
-      "",
-      `Версия: <code>${escapeHtml(deps.offerVersion)}</code>`,
-      accepted ? `Статус: ✅ принята ${escapeHtml(acceptedAt)}` : "Статус: ❌ не принята",
-      "",
-      `Ссылка: ${escapeHtml(deps.offerUrl)}`,
-      "",
-      accepted ? "" : "Нажимая «✅ Принять оферту», вы подтверждаете акцепт публичной оферты.",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
-    const kb = new InlineKeyboard().add(offerUrlButton(deps));
-    if (!accepted) {
-      const next = opts?.acceptNext;
-      kb.row().text("✅ Принять оферту", next ? `offer:accept:${next}` : "offer:accept");
-    }
-    kb.row().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps));
-
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  const showOffer = async (ctx: any): Promise<void> => {
+    await replyOrEdit(ctx, shortPublicOfferText(), { reply_markup: backToCabinetKeyboard(deps) });
   };
 
-  const acceptOffer = async (ctx: any, next?: string): Promise<void> => {
-    if (!ctx.from?.id) return;
-    const telegramId = String(ctx.from.id);
+  const showOfferOnceAndRecord = async (ctx: any, telegramId: string): Promise<boolean> => {
+    const existing = await deps.prisma.user.findUnique({
+      where: { telegramId },
+      select: { id: true, offerAcceptedAt: true },
+    });
+    if (existing?.offerAcceptedAt) return false;
+
+    try {
+      await ctx.reply(shortPublicOfferText(), { link_preview_options: { is_disabled: true } });
+    } catch {
+      return false;
+    }
+
     const now = new Date();
-
-    const user = await deps.prisma.user.findUnique({ where: { telegramId } });
-    if (!user) {
-      await deps.prisma.user.create({
-        data: { telegramId, offerAcceptedAt: now, offerVersion: deps.offerVersion },
-      });
-    } else if (!isOfferAccepted(user as any, deps.offerVersion)) {
-      await deps.prisma.user.update({
-        where: { id: user.id },
-        data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
-      });
-    }
-
-    if (next === "start") {
-      const result = await deps.onboarding.handleStart(telegramId);
-      const nowMs = Date.now();
-      const active = !!result.expiresAt && result.expiresAt.getTime() > nowMs && result.enabled;
-
-      const extraLines: string[] = [];
-      if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
-      if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
-
-      await sendStartScreen(ctx, buildStartCaption(extraLines));
-      return;
-    }
-
-    if (typeof next === "string") {
-      const sub = /^(buy|ext):do:(yoo|cb):(30|90|180):(\d+)$/.exec(next);
-      if (sub) {
-        const flow = sub[1] === "buy" ? CheckoutFlow.BUY : CheckoutFlow.EXTEND;
-        const providerRaw = sub[2] as "yoo" | "cb";
-        const planDays = Number(sub[3]) as 30 | 90 | 180;
-        const deviceLimit = Number(sub[4]);
-        await startSubscriptionCheckout(ctx, flow, providerRaw, planDays, deviceLimit);
-        return;
-      }
-
-      const dev = /^dev:do:(yoo|cb)$/.exec(next);
-      if (dev) {
-        const providerRaw = dev[1];
-        const provider = providerRaw === "yoo" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
-        const created = await deps.payments.createDeviceSlotCheckout({
-          telegramId,
-          provider,
+    if (!existing) {
+      try {
+        await deps.prisma.user.create({
+          data: { telegramId, offerAcceptedAt: now, offerVersion: deps.offerVersion },
         });
-        const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты устройств станет больше автоматически."]
-          .join("\n");
-        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
-        return;
+      } catch (e: any) {
+        if (e?.code !== "P2002") throw e;
+        await deps.prisma.user.updateMany({
+          where: { telegramId, offerAcceptedAt: null },
+          data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
+        });
       }
+      return true;
     }
 
-    await showOffer(ctx);
+    await deps.prisma.user.updateMany({
+      where: { id: existing.id, offerAcceptedAt: null },
+      data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
+    });
+    return true;
   };
 
   bot.command("start", async (ctx) => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
 
+    await showOfferOnceAndRecord(ctx, telegramId);
     const result = await deps.onboarding.handleStart(telegramId);
 
     const now = Date.now();
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
 
     const extraLines: string[] = [];
-    if (!result.isOfferAccepted) extraLines.push("📄 Для триала, промокодов и оплаты нужно принять оферту: /offer");
     if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
     if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
 
@@ -665,7 +614,7 @@ export function buildBot(deps: BotDeps): Bot {
   });
 
   bot.command("offer", async (ctx) => {
-    await showOffer(ctx, { acceptNext: "start" });
+    await showOffer(ctx);
   });
 
   bot.command("promo", async (ctx) => {
@@ -680,23 +629,14 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    const result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+    let result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
     if (result.status === "offer_required") {
-      const text = [
-        "📄 Перед применением промокода нужно принять публичную оферту.",
-        "",
-        "Открой оферту и нажми «✅ Принять оферту». Затем повтори команду /promo.",
-      ].join("\n");
-      const kb = new InlineKeyboard()
-        .add(offerUrlButton(deps))
-        .row()
-        .text("✅ Принять оферту", "offer:accept")
-        .row()
-        .text("🏠 Личный кабинет", "nav:cabinet")
-        .row()
-        .add(supportButton(deps, "🆘 Поддержка"));
-      await replyOrEdit(ctx, text, { reply_markup: kb });
-      return;
+      await showOfferOnceAndRecord(ctx, required.telegramId);
+      result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+      if (result.status === "offer_required") {
+        await replyOrEdit(ctx, "📄 Перед применением промокода нужно принять условия оферты. Попробуй ещё раз чуть позже.", { reply_markup: backToCabinetKeyboard(deps) });
+        return;
+      }
     }
     if (result.status === "not_found") {
       await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
@@ -845,11 +785,6 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   });
 
-  bot.callbackQuery(/^offer:accept(?::(.+))?$/, async (ctx) => {
-    await ctx.answerCallbackQuery();
-    const next = ctx.match?.[1] ? String(ctx.match[1]) : undefined;
-    await acceptOffer(ctx, next);
-  });
 
   bot.callbackQuery(/^buy:cfg:(30|90|180):(\d+)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -956,7 +891,14 @@ export function buildBot(deps: BotDeps): Bot {
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
       if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
-        await showOffer(ctx, { acceptNext: `dev:do:${providerRaw}` });
+        await showOfferOnceAndRecord(ctx, String(ctx.from.id));
+        const created = await deps.payments.createDeviceSlotCheckout({
+          telegramId: String(ctx.from.id),
+          provider,
+        });
+        const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты устройств станет больше автоматически."]
+          .join("\n");
+        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
         return;
       }
       // eslint-disable-next-line no-console
