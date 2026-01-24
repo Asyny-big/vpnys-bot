@@ -34,6 +34,8 @@ export type CreateCheckoutResult = Readonly<{
   providerPaymentId: string;
 }>;
 
+const YOOKASSA_RETURN_URL = "https://t.me/lisvpnapp_bot";
+
 export class PaymentService {
   constructor(
     private readonly prisma: PrismaClient,
@@ -169,7 +171,6 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
-      if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
       this.requireOfferAccepted(user);
       this.requireOfferAccepted(user);
       this.requireOfferAccepted(user);
@@ -193,7 +194,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: this.deps.paymentsReturnUrl,
+        returnUrl: YOOKASSA_RETURN_URL,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: String(params.planDays) },
       });
@@ -262,7 +263,6 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
-      if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -282,7 +282,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: quoted.totalRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: this.deps.paymentsReturnUrl,
+        returnUrl: YOOKASSA_RETURN_URL,
         idempotenceKey: payment.id,
         metadata: {
           userId: user.id,
@@ -348,7 +348,6 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
-      if (!this.deps.paymentsReturnUrl) throw new Error("PAYMENTS_RETURN_URL is required for YooKassa redirects");
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -367,7 +366,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: EXTRA_DEVICE_RUB,
         description: safeYooKassaDescription(30),
-        returnUrl: this.deps.paymentsReturnUrl,
+        returnUrl: YOOKASSA_RETURN_URL,
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
       });
@@ -505,6 +504,9 @@ export class PaymentService {
   }
 
   async handleYooKassaWebhook(event: any): Promise<void> {
+    const eventType = event?.event;
+    if (eventType !== "payment.succeeded") return;
+
     const paymentId = event?.object?.id;
     const status = event?.object?.status;
     if (!paymentId || typeof paymentId !== "string") return;
