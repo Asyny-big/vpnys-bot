@@ -34,8 +34,6 @@ export type CreateCheckoutResult = Readonly<{
   providerPaymentId: string;
 }>;
 
-const YOOKASSA_RETURN_URL = "https://t.me/lisvpnapp_bot";
-
 export class PaymentService {
   constructor(
     private readonly prisma: PrismaClient,
@@ -53,6 +51,12 @@ export class PaymentService {
       cryptobotDeviceSlotRub?: number; // optional override vs EXTRA_DEVICE_RUB
     }>,
   ) {}
+
+  private getPaymentsReturnUrlOrThrow(): string {
+    const url = this.deps.paymentsReturnUrl;
+    if (!url) throw new Error("PAYMENTS_RETURN_URL is not configured");
+    return url;
+  }
 
   async quoteSubscription(params: { telegramId: string; planDays: 30 | 90 | 180; deviceLimit: number }): Promise<{
     currentDeviceLimit: number;
@@ -172,8 +176,6 @@ export class PaymentService {
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
       this.requireOfferAccepted(user);
-      this.requireOfferAccepted(user);
-      this.requireOfferAccepted(user);
 
       const amountRub = this.getPlanRubOrThrow(params.planDays);
 
@@ -194,7 +196,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.getPaymentsReturnUrlOrThrow(),
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, planDays: String(params.planDays) },
       });
@@ -282,7 +284,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: quoted.totalRub,
         description: safeYooKassaDescription(params.planDays),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.getPaymentsReturnUrlOrThrow(),
         idempotenceKey: payment.id,
         metadata: {
           userId: user.id,
@@ -366,7 +368,7 @@ export class PaymentService {
       const created = await this.deps.yookassa.createPayment({
         amountRub: EXTRA_DEVICE_RUB,
         description: safeYooKassaDescription(30),
-        returnUrl: YOOKASSA_RETURN_URL,
+        returnUrl: this.getPaymentsReturnUrlOrThrow(),
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
       });
