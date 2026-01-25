@@ -663,23 +663,24 @@ export async function registerSubscriptionRoutes(
 
         const appCatalog = {
           windows: [
-            { id: 'clashverge', label: 'Clash Verge', deeplink: (encoded) => 'clash://install-config?url=' + encoded },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
+            { id: 'clashverge', label: 'Clash Verge', deeplink: (url) => 'clash://install-config?url=' + encodeURIComponent(url) },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
           ],
           android: [
-            { id: 'v2rayng', label: 'V2RayNG', deeplink: (encoded) => 'v2rayng://install-config?url=' + encoded },
-            { id: 'singbox', label: 'Sing-box', deeplink: (encoded) => 'sing-box://import?url=' + encoded },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
-            { id: 'v2raytun', label: 'v2rayTun', deeplink: (encoded) => 'v2raytun://import?url=' + encoded },
-            { id: 'happ', label: 'Happ', deeplink: (encoded) => 'happ://import?url=' + encoded },
+            { id: 'v2rayng', label: 'V2RayNG', deeplink: (url) => 'v2rayng://install-config?url=' + encodeURIComponent(url) },
+            { id: 'singbox', label: 'Sing-box', deeplink: (url) => 'sing-box://import?url=' + encodeURIComponent(url) },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
+            { id: 'v2raytun', label: 'v2rayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
+            // Happ (как на скриншоте): "happ://add/<subscriptionUrl>" без query-параметра.
+            { id: 'happ', label: 'Happ', deeplink: (url) => 'happ://add/' + url },
           ],
           ios: [
-            { id: 'shadowrocket', label: 'Shadowrocket', deeplink: (encoded) => 'shadowrocket://add/sub?url=' + encoded },
-            { id: 'singbox', label: 'Sing-box', deeplink: (encoded) => 'sing-box://import?url=' + encoded },
+            { id: 'shadowrocket', label: 'Shadowrocket', deeplink: (url) => 'shadowrocket://add/sub?url=' + encodeURIComponent(url) },
+            { id: 'singbox', label: 'Sing-box', deeplink: (url) => 'sing-box://import?url=' + encodeURIComponent(url) },
           ],
           macos: [
-            { id: 'clashverge', label: 'Clash Verge', deeplink: (encoded) => 'clash://install-config?url=' + encoded },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
+            { id: 'clashverge', label: 'Clash Verge', deeplink: (url) => 'clash://install-config?url=' + encodeURIComponent(url) },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
           ],
         };
 
@@ -744,7 +745,7 @@ export async function registerSubscriptionRoutes(
           const enabled = !!app;
           primaryBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
           primaryBtn.textContent = app ? ('📲 Добавить в ' + app.label) : '📲 Добавить подписку';
-          primaryBtn.href = enabled ? app.deeplink(encodeURIComponent(subUrl)) : '#';
+          primaryBtn.href = enabled ? app.deeplink(subUrl) : '#';
         }
 
         function renderSteps(platform) {
