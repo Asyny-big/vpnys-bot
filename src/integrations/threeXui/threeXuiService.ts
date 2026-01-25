@@ -91,11 +91,16 @@ export class ThreeXUiService {
     }
 
     const reality = stream?.realitySettings ?? stream?.reality ?? null;
+    const realitySettings = (reality?.settings ?? reality?.Settings ?? null) as any;
     const publicKey = String(
       (reality?.publicKey ??
         reality?.public_key ??
         reality?.publickey ??
         reality?.pbk ??
+        realitySettings?.publicKey ??
+        realitySettings?.public_key ??
+        realitySettings?.publickey ??
+        realitySettings?.pbk ??
         "") as any,
     ).trim();
     if (!publicKey) {
@@ -108,7 +113,16 @@ export class ThreeXUiService {
         : Array.isArray(reality?.server_names)
           ? reality.server_names
           : null;
-    const sni = String((serverNames?.[0] ?? reality?.serverName ?? reality?.server_name ?? reality?.servername ?? "") as any).trim();
+    const sni = String(
+      (serverNames?.[0] ??
+        reality?.serverName ??
+        reality?.server_name ??
+        reality?.servername ??
+        realitySettings?.serverName ??
+        realitySettings?.server_name ??
+        realitySettings?.servername ??
+        "") as any,
+    ).trim();
     if (!sni) {
       throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality serverNames/serverName`, { details: inbound });
     }
@@ -122,10 +136,10 @@ export class ThreeXUiService {
     const shortIdRaw = (shortIds?.[0] ?? reality?.shortId ?? reality?.short_id ?? "") as any;
     const shortId = typeof shortIdRaw === "string" && shortIdRaw.trim().length ? shortIdRaw.trim() : undefined;
 
-    const spiderXRaw = (reality?.spiderX ?? reality?.spider_x ?? "") as any;
+    const spiderXRaw = (reality?.spiderX ?? reality?.spider_x ?? realitySettings?.spiderX ?? realitySettings?.spider_x ?? "") as any;
     const spiderX = typeof spiderXRaw === "string" && spiderXRaw.trim().length ? spiderXRaw.trim() : undefined;
 
-    const fpRaw = (reality?.fingerprint ?? stream?.tlsSettings?.fingerprint ?? "") as any;
+    const fpRaw = (reality?.fingerprint ?? realitySettings?.fingerprint ?? stream?.tlsSettings?.fingerprint ?? "") as any;
     const fingerprint = typeof fpRaw === "string" && fpRaw.trim().length ? fpRaw.trim() : undefined;
 
     const alpnList = Array.isArray(reality?.alpn) ? reality.alpn : Array.isArray(stream?.tlsSettings?.alpn) ? stream.tlsSettings.alpn : null;
