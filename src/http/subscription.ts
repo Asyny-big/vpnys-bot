@@ -193,6 +193,7 @@ export async function registerSubscriptionRoutes(
           radial-gradient(900px 600px at 30% 120%, rgba(67, 211, 123, 0.10), transparent 55%),
           var(--bg);
         color: var(--text);
+        overflow-x: hidden;
       }
       a { color: inherit; }
       .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 54px; }
@@ -243,10 +244,12 @@ export async function registerSubscriptionRoutes(
         display:flex; align-items:center; justify-content:space-between;
         gap: 12px;
         margin-bottom: 14px;
+        min-width: 0;
       }
       .subTitle {
         display:flex; align-items:center; gap: 10px;
         font-size: 16px; font-weight: 800;
+        min-width: 0;
       }
       .pill {
         display:inline-flex; align-items:center; gap: 8px;
@@ -257,6 +260,10 @@ export async function registerSubscriptionRoutes(
         background: rgba(255,255,255,0.05);
         color: var(--muted);
         white-space: nowrap;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
       }
       .pill.good { color: rgba(67, 211, 123, 0.98); border-color: rgba(67, 211, 123, 0.22); background: rgba(67, 211, 123, 0.07); }
       .pill.bad { color: rgba(255, 91, 106, 0.98); border-color: rgba(255, 91, 106, 0.22); background: rgba(255, 91, 106, 0.06); }
@@ -271,6 +278,8 @@ export async function registerSubscriptionRoutes(
         border-radius: var(--r-md);
         padding: 12px;
         display:flex; gap: 10px; align-items:flex-start;
+        min-width: 0;
+        overflow: hidden;
       }
       .item .ic {
         width: 34px; height: 34px; border-radius: 12px;
@@ -279,8 +288,10 @@ export async function registerSubscriptionRoutes(
         background: rgba(255,255,255,0.05);
         flex: 0 0 auto;
       }
+      .item .txt { min-width: 0; }
       .item .k { color: var(--muted2); font-size: 12px; letter-spacing: 0.2px; }
       .item .v { margin-top: 2px; font-size: 14px; font-weight: 750; }
+      .item .v { overflow-wrap: anywhere; word-break: break-all; }
       .sectionTitle {
         margin: 16px 4px 10px;
         color: rgba(231,237,244,0.88);
@@ -295,6 +306,39 @@ export async function registerSubscriptionRoutes(
         border: 1px solid var(--border);
         border-radius: var(--r-lg);
       }
+      .appSelect {
+        margin-top: 10px;
+        padding: 12px;
+        background: var(--panel2);
+        border: 1px solid var(--border);
+        border-radius: var(--r-lg);
+        display:flex;
+        gap: 10px;
+        align-items:center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+      }
+      .appSelect .label {
+        color: rgba(231,237,244,0.88);
+        font-size: 13px;
+        font-weight: 850;
+        letter-spacing: 0.2px;
+      }
+      .selectWrap { flex: 1 1 320px; min-width: 240px; }
+      .select {
+        width: 100%;
+        appearance: none;
+        cursor: pointer;
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(0,0,0,0.22);
+        color: var(--text);
+        font-weight: 850;
+        padding: 12px 14px;
+        line-height: 1.2;
+      }
+      .select:disabled { opacity: 0.6; cursor: not-allowed; }
+      .appHint { margin-top: 8px; color: var(--muted2); font-size: 12.5px; line-height: 1.45; }
       .tab {
         appearance:none; cursor:pointer;
         border-radius: 999px;
@@ -350,6 +394,15 @@ export async function registerSubscriptionRoutes(
         transition: transform 120ms ease, filter 120ms ease;
       }
       .primary:active { transform: translateY(1px); }
+      .primary:disabled {
+        opacity: 0.48;
+        cursor: not-allowed;
+        filter: saturate(0.85);
+        box-shadow: none;
+        border-color: rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+      }
+      .primary:disabled:active { transform: none; }
       .small {
         margin-top: 12px;
         color: var(--muted2);
@@ -382,6 +435,7 @@ export async function registerSubscriptionRoutes(
         background: rgba(0,0,0,0.22);
         color: var(--text);
         font-weight: 650;
+        min-width: 0;
       }
       .toast {
         position: fixed;
@@ -441,6 +495,11 @@ export async function registerSubscriptionRoutes(
         .iconBtn { padding: 10px; }
         .grid { grid-template-columns: 1fr; }
         .tab { min-width: 0; flex: 1 1 auto; }
+        .subHead { flex-wrap: wrap; }
+        .pill { max-width: 100%; }
+      }
+      @media (max-width: 480px) {
+        .selectWrap { flex-basis: 100%; min-width: 0; }
       }
     </style>
   </head>
@@ -474,28 +533,28 @@ export async function registerSubscriptionRoutes(
         <div class="grid">
           <div class="item">
             <div class="ic">👤</div>
-            <div>
+            <div class="txt">
               <div class="k">Имя пользователя</div>
               <div class="v">${escapeHtml(userLabel)}</div>
             </div>
           </div>
           <div class="item">
             <div class="ic">${isActive ? "✅" : "⏳"}</div>
-            <div>
+            <div class="txt">
               <div class="k">Статус</div>
               <div class="v">${escapeHtml(statusLabel)}</div>
             </div>
           </div>
           <div class="item">
             <div class="ic">📅</div>
-            <div>
+            <div class="txt">
               <div class="k">Истекает</div>
               <div class="v">${escapeHtml(expiresLabel)}</div>
             </div>
           </div>
           <div class="item">
             <div class="ic">📶</div>
-            <div>
+            <div class="txt">
               <div class="k">Трафик</div>
               <div class="v">${escapeHtml(trafficLabel)}</div>
             </div>
@@ -511,12 +570,22 @@ export async function registerSubscriptionRoutes(
         <button class="tab" role="tab" data-platform="macos" aria-selected="false" type="button">macOS</button>
       </div>
 
+      <div class="appSelect" aria-label="Выбор приложения">
+        <div class="label">Выберите приложение</div>
+        <div class="selectWrap">
+          <select class="select" id="appSelect" aria-label="Выберите приложение">
+            <option value="" selected disabled>Выберите приложение</option>
+          </select>
+          <div class="appHint" id="appHint">Выберите платформу, затем приложение — и добавьте подписку в один клик.</div>
+        </div>
+      </div>
+
       <div class="card stepsCard" aria-live="polite">
         <div class="sectionTitle" style="margin-top:0">Инструкция</div>
         <ul class="steps" id="steps"></ul>
 
         <div class="primaryWrap">
-          <button class="primary" id="primaryBtn" type="button">📲 Добавить подписку</button>
+          <button class="primary" id="primaryBtn" type="button" disabled>📲 Добавить подписку</button>
         </div>
 
         <div class="small">Если не добавилось автоматически — скопируйте ссылку вручную.</div>
@@ -551,31 +620,35 @@ export async function registerSubscriptionRoutes(
         const data = ${safeJson(pageData)};
         const subUrl = data.subUrl;
 
-        const platformSteps = {
+        data.appId = '';
+
+        const appCatalog = {
           windows: [
-            { t: 'Скачать приложение', d: 'Clash Verge или Hiddify' },
-            { t: 'Добавить подписку', d: 'Нажмите «Добавить подписку» ниже' },
-            { t: 'Подключиться', d: 'Выберите сервер и включите VPN' },
+            { id: 'clashverge', label: 'Clash Verge', deeplink: (encoded) => 'clash://install-config?url=' + encoded },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
           ],
           android: [
-            { t: 'Скачать приложение', d: 'Hiddify или Clash (Android)' },
-            { t: 'Импортировать подписку', d: 'Нажмите «Добавить подписку» ниже' },
-            { t: 'Подключиться', d: 'Включите VPN в приложении' },
+            { id: 'v2rayng', label: 'V2RayNG', deeplink: (encoded) => 'v2rayng://install-config?url=' + encoded },
+            { id: 'singbox', label: 'Sing-box', deeplink: (encoded) => 'sing-box://import?url=' + encoded },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
+            { id: 'v2raytun', label: 'v2rayTun', deeplink: (encoded) => 'v2raytun://import?url=' + encoded },
+            { id: 'happ', label: 'Happ', deeplink: (encoded) => 'happ://import?url=' + encoded },
           ],
           ios: [
-            { t: 'Скачать приложение', d: 'Hiddify (iOS) или совместимый клиент' },
-            { t: 'Импортировать подписку', d: 'Нажмите «Добавить подписку» ниже' },
-            { t: 'Подключиться', d: 'Выберите сервер и включите VPN' },
+            { id: 'shadowrocket', label: 'Shadowrocket', deeplink: (encoded) => 'shadowrocket://add/sub?url=' + encoded },
+            { id: 'singbox', label: 'Sing-box', deeplink: (encoded) => 'sing-box://import?url=' + encoded },
           ],
           macos: [
-            { t: 'Скачать приложение', d: 'Clash Verge или Hiddify' },
-            { t: 'Добавить подписку', d: 'Нажмите «Добавить подписку» ниже' },
-            { t: 'Подключиться', d: 'Выберите сервер и включите VPN' },
+            { id: 'clashverge', label: 'Clash Verge', deeplink: (encoded) => 'clash://install-config?url=' + encoded },
+            { id: 'hiddify', label: 'Hiddify', deeplink: (encoded) => 'hiddify://import/' + encoded },
           ],
         };
 
         const tabs = Array.from(document.querySelectorAll('.tab'));
         const stepsEl = document.getElementById('steps');
+        const appSelect = document.getElementById('appSelect');
+        const appHint = document.getElementById('appHint');
+        const primaryBtn = document.getElementById('primaryBtn');
         const toast = document.getElementById('toast');
         const toastTitle = document.getElementById('toastTitle');
         const toastMsg = document.getElementById('toastMsg');
@@ -601,8 +674,47 @@ export async function registerSubscriptionRoutes(
           }
         }
 
+        function appsForPlatform(platform) {
+          return appCatalog[platform] || [];
+        }
+
+        function selectedApp() {
+          const apps = appsForPlatform(data.platform);
+          return apps.find((a) => a.id === data.appId) || null;
+        }
+
+        function renderAppSelect(platform) {
+          const apps = appsForPlatform(platform);
+          const hasSelected = apps.some((a) => a.id === data.appId);
+          if (!hasSelected) data.appId = '';
+
+          appSelect.innerHTML = ['<option value=\"\" ' + (data.appId ? '' : 'selected') + ' disabled>Выберите приложение</option>']
+            .concat(apps.map((a) => '<option value=\"' + a.id + '\" ' + (a.id === data.appId ? 'selected' : '') + '>' + a.label + '</option>'))
+            .join('');
+
+          appSelect.disabled = apps.length === 0;
+          if (apps.length === 0) {
+            appHint.textContent = 'Для этой платформы пока нет поддерживаемых приложений.';
+          } else {
+            appHint.textContent = 'После выбора приложения кнопка станет активной.';
+          }
+        }
+
+        function updatePrimary() {
+          const app = selectedApp();
+          const enabled = !!app;
+          primaryBtn.disabled = !enabled;
+          primaryBtn.textContent = app ? ('📲 Добавить в ' + app.label) : '📲 Добавить подписку';
+        }
+
         function renderSteps(platform) {
-          const steps = platformSteps[platform] || platformSteps.windows;
+          const app = selectedApp();
+          const appName = app ? app.label : 'приложение';
+          const steps = [
+            { t: 'Скачать приложение', d: app ? appName : 'Выберите приложение ниже' },
+            { t: 'Импортировать подписку', d: 'Нажмите «Добавить подписку» ниже' },
+            { t: 'Подключиться', d: platform === 'android' ? 'Включите VPN в приложении' : 'Выберите сервер и включите VPN' },
+          ];
           stepsEl.innerHTML = steps.map((s, i) => (
             '<li class=\"step\">' +
               '<div class=\"num\">' + (i + 1) + '</div>' +
@@ -614,11 +726,20 @@ export async function registerSubscriptionRoutes(
         function setPlatform(next) {
           data.platform = next;
           tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.platform === next)));
+          renderAppSelect(next);
           renderSteps(next);
+          updatePrimary();
         }
 
         tabs.forEach((t) => t.addEventListener('click', () => setPlatform(t.dataset.platform)));
-        renderSteps('windows');
+
+        appSelect.addEventListener('change', () => {
+          data.appId = String(appSelect.value || '');
+          renderSteps(data.platform);
+          updatePrimary();
+        });
+
+        setPlatform('windows');
 
         document.getElementById('copySubBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
 
@@ -637,26 +758,16 @@ export async function registerSubscriptionRoutes(
         });
         document.getElementById('manualCopyBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
 
-        document.getElementById('primaryBtn')?.addEventListener('click', () => {
+        primaryBtn?.addEventListener('click', () => {
+          const app = selectedApp();
+          if (!app) {
+            showToast('Выберите приложение', 'Сначала выберите приложение для импорта подписки.');
+            return;
+          }
           const encoded = encodeURIComponent(subUrl);
-          const deeplinks = [
-            'clash://install-config?url=' + encoded,
-            'hiddify://import/' + encoded,
-          ];
-
-          const startedAt = Date.now();
-          showToast('Открываем приложение…', 'Если не открылось — установите приложение и повторите.');
-
-          // Try first deeplink, then a fallback.
-          try { window.location.href = deeplinks[0]; } catch {}
-          setTimeout(() => { try { window.location.href = deeplinks[1]; } catch {} }, 650);
-
-          setTimeout(() => {
-            // If we are still here, hint the user. (No reliable install detection in browsers.)
-            if (Date.now() - startedAt > 900) {
-              showToast('Не открылось?', 'Установите клиент (Clash/Hiddify) и повторите, или добавьте ссылку вручную.');
-            }
-          }, 1300);
+          const deeplink = app.deeplink(encoded);
+          window.location.href = deeplink;
+          showToast('Открываем приложение…', 'Если приложение не открылось — установите его и повторите, либо добавьте подписку вручную.');
         });
       })();
     </script>
