@@ -77,14 +77,16 @@ async function main(): Promise<void> {
 
   app.get("/healthz", async () => ({ ok: true }));
   await registerWebhooks(app, { webhookToken: env.webhookToken, payments });
-  await registerSubscriptionRoutes(app, {
-    prisma,
-    subscriptions,
-    xui,
-    backendPublicUrl: env.backendPublicUrl,
-    telegramBotUrl: env.telegramBotUrl,
-    xuiInboundId: env.xuiInboundId,
-    xuiClientFlow: env.xuiClientFlow,
+  await app.register(async (root) => {
+    await registerSubscriptionRoutes(root, {
+      prisma,
+      subscriptions,
+      xui,
+      backendPublicUrl: env.backendPublicUrl,
+      telegramBotUrl: env.telegramBotUrl,
+      xuiInboundId: env.xuiInboundId,
+      xuiClientFlow: env.xuiClientFlow,
+    });
   });
 
   await app.listen({ host: env.appHost, port: env.appPort });

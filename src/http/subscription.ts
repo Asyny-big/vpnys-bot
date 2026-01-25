@@ -34,7 +34,9 @@ export async function registerSubscriptionRoutes(
     });
 
     if (!row) {
-      return await reply.code(404).type("text/plain; charset=utf-8").send("Not found\n");
+      const built = buildSubscription({ enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl }, []);
+      for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
+      return await reply.code(200).send(built.body);
     }
 
     // Avoid hitting 3x-ui on every client refresh, but do sync when we likely need it.
@@ -74,6 +76,6 @@ export async function registerSubscriptionRoutes(
     );
 
     for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
-    return await reply.send(built.body);
+    return await reply.code(200).send(built.body);
   });
 }
