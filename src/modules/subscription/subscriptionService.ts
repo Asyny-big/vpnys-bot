@@ -214,4 +214,9 @@ export class SubscriptionService {
     const base = backendPublicUrl.replace(/\/+$/, "");
     return `${base}/sub/${encodeURIComponent(token.trim())}`;
   }
+
+  connectUrl(backendPublicUrl: string, token: string): string {
+    const base = backendPublicUrl.replace(/\/+$/, "");
+    return `${base}/connect/${encodeURIComponent(token.trim())}`;
+  }
 }

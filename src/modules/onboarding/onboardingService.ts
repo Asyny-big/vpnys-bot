@@ -78,7 +78,7 @@ export class OnboardingService {
       user,
       isOfferAccepted: offerOk,
       isTrialGrantedNow,
-      subscriptionUrl: this.subscriptions.subscriptionUrl(this.backendPublicUrl, token),
+      subscriptionUrl: this.subscriptions.connectUrl(this.backendPublicUrl, token),
       expiresAt: returnExpiresAt,
       enabled: finalState.enabled,
     };

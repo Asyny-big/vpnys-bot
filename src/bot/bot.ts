@@ -278,7 +278,7 @@ export function buildBot(deps: BotDeps): Bot {
       .join("\n");
 
     const token = sub.xuiSubscriptionId;
-    const subscriptionUrl = deps.subscriptions.subscriptionUrl(deps.backendPublicUrl, token);
+    const subscriptionUrl = deps.subscriptions.connectUrl(deps.backendPublicUrl, token);
     const kb = new InlineKeyboard().url("🚀 Подключить VPN", subscriptionUrl).row();
     if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
     kb.text("📄 Инструкция", "nav:guide")
