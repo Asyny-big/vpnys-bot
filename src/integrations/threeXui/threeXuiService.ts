@@ -90,23 +90,39 @@ export class ThreeXUiService {
       throw new ThreeXUiError(`3x-ui inbound ${inboundId} security is not reality (got: ${security || "empty"})`, { details: inbound });
     }
 
-    const reality = stream?.realitySettings ?? null;
-    const publicKey = String(reality?.publicKey ?? "").trim();
+    const reality = stream?.realitySettings ?? stream?.reality ?? null;
+    const publicKey = String(
+      (reality?.publicKey ??
+        reality?.public_key ??
+        reality?.publickey ??
+        reality?.pbk ??
+        "") as any,
+    ).trim();
     if (!publicKey) {
       throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality publicKey`, { details: inbound });
     }
 
-    const serverNames = Array.isArray(reality?.serverNames) ? reality.serverNames : null;
-    const sni = String((serverNames?.[0] ?? reality?.serverName ?? "") as any).trim();
+    const serverNames =
+      Array.isArray(reality?.serverNames)
+        ? reality.serverNames
+        : Array.isArray(reality?.server_names)
+          ? reality.server_names
+          : null;
+    const sni = String((serverNames?.[0] ?? reality?.serverName ?? reality?.server_name ?? reality?.servername ?? "") as any).trim();
     if (!sni) {
       throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality serverNames/serverName`, { details: inbound });
     }
 
-    const shortIds = Array.isArray(reality?.shortIds) ? reality.shortIds : null;
-    const shortIdRaw = (shortIds?.[0] ?? reality?.shortId ?? "") as any;
+    const shortIds =
+      Array.isArray(reality?.shortIds)
+        ? reality.shortIds
+        : Array.isArray(reality?.short_ids)
+          ? reality.short_ids
+          : null;
+    const shortIdRaw = (shortIds?.[0] ?? reality?.shortId ?? reality?.short_id ?? "") as any;
     const shortId = typeof shortIdRaw === "string" && shortIdRaw.trim().length ? shortIdRaw.trim() : undefined;
 
-    const spiderXRaw = (reality?.spiderX ?? "") as any;
+    const spiderXRaw = (reality?.spiderX ?? reality?.spider_x ?? "") as any;
     const spiderX = typeof spiderXRaw === "string" && spiderXRaw.trim().length ? spiderXRaw.trim() : undefined;
 
     const fpRaw = (reality?.fingerprint ?? stream?.tlsSettings?.fingerprint ?? "") as any;
