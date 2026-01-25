@@ -17,7 +17,7 @@ export class OnboardingService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
-    private readonly publicPanelBaseUrl: string,
+    private readonly backendPublicUrl: string,
     private readonly deps: Readonly<{ offerVersion: string }>,
   ) {}
 
@@ -73,11 +73,12 @@ export class OnboardingService {
         ? (finalState.expiresAt.getTime() > finalState.subscription.paidUntil.getTime() ? finalState.expiresAt : finalState.subscription.paidUntil)
         : (finalState.expiresAt ?? finalState.subscription.paidUntil ?? undefined);
 
+    const token = finalState.subscription.xuiSubscriptionId;
     return {
       user,
       isOfferAccepted: offerOk,
       isTrialGrantedNow,
-      subscriptionUrl: this.subscriptions.subscriptionUrl(this.publicPanelBaseUrl, finalState.subscription.xuiSubscriptionId),
+      subscriptionUrl: this.subscriptions.subscriptionUrl(this.backendPublicUrl, token),
       expiresAt: returnExpiresAt,
       enabled: finalState.enabled,
     };

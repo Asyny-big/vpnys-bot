@@ -20,7 +20,7 @@ export type BotDeps = Readonly<{
   subscriptions: SubscriptionService;
   payments: PaymentService;
   promos: PromoService;
-  publicPanelBaseUrl: string;
+  backendPublicUrl: string;
   offerVersion: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
@@ -277,8 +277,9 @@ export function buildBot(deps: BotDeps): Bot {
       .filter(Boolean)
       .join("\n");
 
-    const subUrl = deps.subscriptions.subscriptionUrl(deps.publicPanelBaseUrl, sub.xuiSubscriptionId);
-    const kb = new InlineKeyboard().url("🚀 Подключить VPN", subUrl).row();
+    const token = sub.xuiSubscriptionId;
+    const subscriptionUrl = deps.subscriptions.subscriptionUrl(deps.backendPublicUrl, token);
+    const kb = new InlineKeyboard().url("🚀 Подключить VPN", subscriptionUrl).row();
     if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
     kb.text("📄 Инструкция", "nav:guide")
       .text("📄 Оферта", "nav:offer")
@@ -521,20 +522,20 @@ export function buildBot(deps: BotDeps): Bot {
       platform === "android"
         ? [
             "1. В боте нажми «🚀 Подключить VPN»",
-            "2. Откроется подписка в панели",
+            "2. Откроется страница подписки",
             "3. Выбери приложение (например, Hiddify) и открой подписку",
             "4. Включи VPN",
           ]
         : platform === "ios"
           ? [
               "1. В боте нажми «🚀 Подключить VPN»",
-              "2. Откроется подписка в панели",
+              "2. Откроется страница подписки",
               "3. Выбери приложение (например, Hiddify) и открой подписку",
               "4. Включи VPN",
             ]
           : [
               "1. В боте нажми «🚀 Подключить VPN»",
-              "2. Откроется подписка в панели",
+              "2. Откроется страница подписки",
               "3. Выбери приложение и добавь подписку",
               "4. Включи VPN",
             ];

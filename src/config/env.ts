@@ -15,8 +15,8 @@ type Env = Readonly<{
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
 
-  // What users receive in /sub/<subscription_id> URL (can be public host / reverse proxy).
-  publicPanelBaseUrl: string;
+  // Public URL of THIS backend (the one that serves GET /sub/<token>).
+  backendPublicUrl: string;
 
   offerVersion: string;
 
@@ -135,6 +135,13 @@ export function loadEnv(): Env {
   const xuiBaseUrl = ensureUrl("XUI_BASE_URL", required("XUI_BASE_URL"));
   ensureXuiLocalhost(xuiBaseUrl);
 
+  const backendPublicUrl = ensureUrl("BACKEND_PUBLIC_URL", required("BACKEND_PUBLIC_URL"));
+  const xuiPort = new URL(xuiBaseUrl).port;
+  const backendPort = new URL(backendPublicUrl).port;
+  if (backendPort && xuiPort && backendPort === xuiPort) {
+    throw new Error("BACKEND_PUBLIC_URL must point to your backend (not 3x-ui). It matches the XUI_BASE_URL port.");
+  }
+
   const databaseUrl = required("DATABASE_URL");
   if (databaseUrl !== "file:./data.db") {
     throw new Error(`Only SQLite is supported. Set DATABASE_URL=file:./data.db (got: ${databaseUrl})`);
@@ -187,7 +194,7 @@ export function loadEnv(): Env {
     adminUsername: optional("ADMIN_USERNAME"),
     adminUserIds: parseIdSet(optional("ADMIN_USER_IDS")),
 
-    publicPanelBaseUrl: ensureUrl("PUBLIC_PANEL_BASE_URL", required("PUBLIC_PANEL_BASE_URL")),
+    backendPublicUrl,
 
     offerVersion,
 

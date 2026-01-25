@@ -48,11 +48,6 @@ export class ThreeXUiService {
     return `tg:${telegramId}`;
   }
 
-  subscriptionUrl(publicPanelBaseUrl: string, subscriptionId: string): string {
-    const base = publicPanelBaseUrl.replace(/\/+$/, "");
-    return `${base}/sub/${encodeURIComponent(subscriptionId)}`;
-  }
-
   async listInbounds(): Promise<Inbound[]> {
     return await this.api.requestJson<Inbound[]>("/panel/api/inbounds/list", { method: "GET" });
   }

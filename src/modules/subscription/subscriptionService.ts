@@ -210,7 +210,8 @@ export class SubscriptionService {
     return await this.setExpiryAndEnable({ user: params.user, expiresAt: nextExpiresAt, enable: true });
   }
 
-  subscriptionUrl(publicPanelBaseUrl: string, subscriptionId: string): string {
-    return this.xui.subscriptionUrl(publicPanelBaseUrl, subscriptionId);
+  subscriptionUrl(backendPublicUrl: string, token: string): string {
+    const base = backendPublicUrl.replace(/\/+$/, "");
+    return `${base}/sub/${encodeURIComponent(token.trim())}`;
   }
 }

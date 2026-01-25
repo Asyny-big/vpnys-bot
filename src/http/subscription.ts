@@ -7,8 +7,8 @@ import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 
 const ESTONIA_SERVER_NAME = "🇪🇪 Estonia • LisVPN";
 
-function publicHostFromBaseUrl(publicPanelBaseUrl: string): string {
-  const url = new URL(publicPanelBaseUrl);
+function hostnameFromUrl(baseUrl: string): string {
+  const url = new URL(baseUrl);
   return url.hostname;
 }
 
@@ -18,7 +18,7 @@ export async function registerSubscriptionRoutes(
     prisma: PrismaClient;
     subscriptions: SubscriptionService;
     xui: ThreeXUiService;
-    publicPanelBaseUrl: string;
+    backendPublicUrl: string;
     telegramBotUrl: string;
     xuiInboundId: number;
     xuiClientFlow?: string;
@@ -63,7 +63,7 @@ export async function registerSubscriptionRoutes(
         ? [
             {
               name: ESTONIA_SERVER_NAME,
-              host: publicHostFromBaseUrl(deps.publicPanelBaseUrl),
+              host: hostnameFromUrl(deps.backendPublicUrl),
               uuid: state.subscription.xuiClientUuid,
               flow: deps.xuiClientFlow,
               template: await deps.xui.getVlessRealityTemplate(deps.xuiInboundId),
