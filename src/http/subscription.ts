@@ -47,11 +47,46 @@ export async function registerSubscriptionRoutes(
     xuiClientFlow?: string;
   }>,
 ): Promise<void> {
+  const backendPublicOrigin = (() => {
+    try {
+      return new URL(deps.backendPublicUrl).origin;
+    } catch {
+      return deps.backendPublicUrl.replace(/\/+$/, "");
+    }
+  })();
+
+  const publicOriginFromRequest = (req: any): string => {
+    const header = (name: string): string | undefined => {
+      const value = req.headers?.[name];
+      if (typeof value === "string" && value.trim().length) return value.trim();
+      if (Array.isArray(value) && typeof value[0] === "string" && value[0].trim().length) return value[0].trim();
+      return undefined;
+    };
+
+    const protoRaw = header("x-forwarded-proto");
+    const hostRaw = header("x-forwarded-host") ?? header("host");
+    const proto = protoRaw ? protoRaw.split(",")[0]!.trim().toLowerCase() : undefined;
+    const host = hostRaw ? hostRaw.split(",")[0]!.trim() : undefined;
+
+    if (!proto || !host) return backendPublicOrigin;
+    if (proto !== "https" && proto !== "http") return backendPublicOrigin;
+    if (!host.length || /\s/.test(host)) return backendPublicOrigin;
+
+    try {
+      // eslint-disable-next-line no-new
+      new URL(`${proto}://${host}`);
+      return `${proto}://${host}`;
+    } catch {
+      return backendPublicOrigin;
+    }
+  };
+
   app.get<{ Params: { token: string } }>("/connect/:token", async (req, reply) => {
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
 
-    const baseSubUrl = deps.subscriptions.subscriptionUrl(deps.backendPublicUrl, token);
+    const publicOrigin = publicOriginFromRequest(req);
+    const baseSubUrl = `${publicOrigin.replace(/\/+$/, "")}/sub/${encodeURIComponent(token)}`;
 
     try {
       const row = await deps.prisma.subscription.findUnique({
@@ -382,6 +417,7 @@ export async function registerSubscriptionRoutes(
       .primaryWrap { margin-top: 14px; }
       .primary {
         width: 100%;
+        display: block;
         appearance:none; cursor:pointer;
         padding: 14px 14px;
         border-radius: 16px;
@@ -392,17 +428,20 @@ export async function registerSubscriptionRoutes(
         font-size: 16px;
         box-shadow: 0 20px 60px rgba(0, 209, 255, 0.10), 0 20px 60px rgba(255, 170, 0, 0.06);
         transition: transform 120ms ease, filter 120ms ease;
+        text-decoration: none;
+        text-align: center;
       }
       .primary:active { transform: translateY(1px); }
-      .primary:disabled {
+      .primary[aria-disabled="true"] {
         opacity: 0.48;
         cursor: not-allowed;
         filter: saturate(0.85);
         box-shadow: none;
         border-color: rgba(255,255,255,0.14);
         background: rgba(255,255,255,0.06);
+        pointer-events: none;
       }
-      .primary:disabled:active { transform: none; }
+      .primary[aria-disabled="true"]:active { transform: none; }
       .small {
         margin-top: 12px;
         color: var(--muted2);
@@ -585,10 +624,10 @@ export async function registerSubscriptionRoutes(
         <ul class="steps" id="steps"></ul>
 
         <div class="primaryWrap">
-          <button class="primary" id="primaryBtn" type="button" disabled>📲 Добавить подписку</button>
+          <a class="primary" id="primaryBtn" href="#" role="button" aria-disabled="true">📲 Добавить подписку</a>
         </div>
 
-        <div class="small">Если не добавилось автоматически — скопируйте ссылку вручную.</div>
+        <div class="small">Если приложение не открылось — установите его и повторите, либо добавьте подписку вручную.</div>
         <div class="row">
           <button class="secondary" id="showLinkBtn" type="button">Показать ссылку</button>
         </div>
@@ -703,8 +742,9 @@ export async function registerSubscriptionRoutes(
         function updatePrimary() {
           const app = selectedApp();
           const enabled = !!app;
-          primaryBtn.disabled = !enabled;
+          primaryBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
           primaryBtn.textContent = app ? ('📲 Добавить в ' + app.label) : '📲 Добавить подписку';
+          primaryBtn.href = enabled ? app.deeplink(encodeURIComponent(subUrl)) : '#';
         }
 
         function renderSteps(platform) {
@@ -758,16 +798,11 @@ export async function registerSubscriptionRoutes(
         });
         document.getElementById('manualCopyBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
 
-        primaryBtn?.addEventListener('click', () => {
-          const app = selectedApp();
-          if (!app) {
+        primaryBtn?.addEventListener('click', (e) => {
+          if (primaryBtn.getAttribute('aria-disabled') === 'true') {
+            e.preventDefault();
             showToast('Выберите приложение', 'Сначала выберите приложение для импорта подписки.');
-            return;
           }
-          const encoded = encodeURIComponent(subUrl);
-          const deeplink = app.deeplink(encoded);
-          window.location.href = deeplink;
-          showToast('Открываем приложение…', 'Если приложение не открылось — установите его и повторите, либо добавьте подписку вручную.');
         });
       })();
     </script>
