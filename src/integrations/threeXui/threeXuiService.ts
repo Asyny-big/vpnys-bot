@@ -21,8 +21,28 @@ export type ThreeXUiClientInfo = Readonly<{
   limitIp?: number;
 }>;
 
+export type VlessRealityTemplate = Readonly<{
+  protocol: "vless";
+  port: number;
+  network: "tcp" | "ws" | "grpc";
+  security: "reality";
+  sni: string;
+  publicKey: string;
+  shortId?: string;
+  spiderX?: string;
+  fingerprint?: string;
+  alpn?: string;
+  tcpHeaderType?: string;
+  wsPath?: string;
+  wsHost?: string;
+  grpcServiceName?: string;
+}>;
+
 export class ThreeXUiService {
   constructor(private readonly api: ThreeXUiApiClient) {}
+
+  private readonly vlessRealityTemplateCache = new Map<number, { fetchedAt: number; value: VlessRealityTemplate }>();
+  private readonly vlessRealityTemplateTtlMs = 10 * 60 * 1000;
 
   telegramEmail(telegramId: string): string {
     return `tg:${telegramId}`;
@@ -35,6 +55,110 @@ export class ThreeXUiService {
 
   async listInbounds(): Promise<Inbound[]> {
     return await this.api.requestJson<Inbound[]>("/panel/api/inbounds/list", { method: "GET" });
+  }
+
+  private parseJsonMaybe(value: unknown): any {
+    if (!value) return null;
+    if (typeof value === "object") return value;
+    if (typeof value !== "string") return null;
+    try {
+      return JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+
+  async getVlessRealityTemplate(inboundId: number): Promise<VlessRealityTemplate> {
+    const cached = this.vlessRealityTemplateCache.get(inboundId);
+    if (cached && Date.now() - cached.fetchedAt < this.vlessRealityTemplateTtlMs) return cached.value;
+
+    const inbound = await this.api.requestJson<any>(`/panel/api/inbounds/get/${inboundId}`, { method: "GET" });
+    const port = Number(inbound?.port);
+    if (!Number.isFinite(port) || port <= 0) {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing/invalid port`, { details: inbound });
+    }
+
+    const protocol = String(inbound?.protocol ?? "");
+    if (protocol !== "vless") {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} protocol is not vless (got: ${protocol || "empty"})`, { details: inbound });
+    }
+
+    const stream = this.parseJsonMaybe(inbound?.streamSettings);
+    const networkRaw = String(stream?.network ?? "tcp");
+    const network =
+      networkRaw === "tcp" || networkRaw === "ws" || networkRaw === "grpc"
+        ? networkRaw
+        : "tcp";
+
+    const security = String(stream?.security ?? "");
+    if (security !== "reality") {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} security is not reality (got: ${security || "empty"})`, { details: inbound });
+    }
+
+    const reality = stream?.realitySettings ?? null;
+    const publicKey = String(reality?.publicKey ?? "").trim();
+    if (!publicKey) {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality publicKey`, { details: inbound });
+    }
+
+    const serverNames = Array.isArray(reality?.serverNames) ? reality.serverNames : null;
+    const sni = String((serverNames?.[0] ?? reality?.serverName ?? "") as any).trim();
+    if (!sni) {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality serverNames/serverName`, { details: inbound });
+    }
+
+    const shortIds = Array.isArray(reality?.shortIds) ? reality.shortIds : null;
+    const shortIdRaw = (shortIds?.[0] ?? reality?.shortId ?? "") as any;
+    const shortId = typeof shortIdRaw === "string" && shortIdRaw.trim().length ? shortIdRaw.trim() : undefined;
+
+    const spiderXRaw = (reality?.spiderX ?? "") as any;
+    const spiderX = typeof spiderXRaw === "string" && spiderXRaw.trim().length ? spiderXRaw.trim() : undefined;
+
+    const fpRaw = (reality?.fingerprint ?? stream?.tlsSettings?.fingerprint ?? "") as any;
+    const fingerprint = typeof fpRaw === "string" && fpRaw.trim().length ? fpRaw.trim() : undefined;
+
+    const alpnList = Array.isArray(reality?.alpn) ? reality.alpn : Array.isArray(stream?.tlsSettings?.alpn) ? stream.tlsSettings.alpn : null;
+    const alpn =
+      alpnList && alpnList.map((v: any) => String(v ?? "").trim()).filter(Boolean).length
+        ? alpnList.map((v: any) => String(v ?? "").trim()).filter(Boolean).join(",")
+        : undefined;
+
+    const tcpHeaderTypeRaw = (stream?.tcpSettings?.header?.type ?? "") as any;
+    const tcpHeaderType =
+      typeof tcpHeaderTypeRaw === "string" && tcpHeaderTypeRaw.trim().length
+        ? tcpHeaderTypeRaw.trim()
+        : undefined;
+
+    const wsPathRaw = (stream?.wsSettings?.path ?? "") as any;
+    const wsPath = typeof wsPathRaw === "string" && wsPathRaw.trim().length ? wsPathRaw.trim() : undefined;
+    const wsHostRaw = (stream?.wsSettings?.headers?.Host ?? stream?.wsSettings?.headers?.host ?? "") as any;
+    const wsHost = typeof wsHostRaw === "string" && wsHostRaw.trim().length ? wsHostRaw.trim() : undefined;
+
+    const grpcServiceNameRaw = (stream?.grpcSettings?.serviceName ?? "") as any;
+    const grpcServiceName =
+      typeof grpcServiceNameRaw === "string" && grpcServiceNameRaw.trim().length
+        ? grpcServiceNameRaw.trim()
+        : undefined;
+
+    const value: VlessRealityTemplate = {
+      protocol: "vless",
+      port,
+      network,
+      security: "reality",
+      sni,
+      publicKey,
+      ...(shortId ? { shortId } : {}),
+      ...(spiderX ? { spiderX } : {}),
+      ...(fingerprint ? { fingerprint } : {}),
+      ...(alpn ? { alpn } : {}),
+      ...(tcpHeaderType ? { tcpHeaderType } : {}),
+      ...(wsPath ? { wsPath } : {}),
+      ...(wsHost ? { wsHost } : {}),
+      ...(grpcServiceName ? { grpcServiceName } : {}),
+    };
+
+    this.vlessRealityTemplateCache.set(inboundId, { fetchedAt: Date.now(), value });
+    return value;
   }
 
   private async getInboundMaybe(inboundId: number): Promise<Inbound | null> {

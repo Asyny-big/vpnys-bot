@@ -10,6 +10,8 @@ type Env = Readonly<{
 
   databaseUrl: string;
   telegramBotToken: string;
+  // Public bot URL shown to users in subscription messages (e.g. when expired).
+  telegramBotUrl: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
 
@@ -181,6 +183,7 @@ export function loadEnv(): Env {
 
     databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
+    telegramBotUrl: ensureUrl("TELEGRAM_BOT_URL", required("TELEGRAM_BOT_URL")),
     adminUsername: optional("ADMIN_USERNAME"),
     adminUserIds: parseIdSet(optional("ADMIN_USER_IDS")),
 

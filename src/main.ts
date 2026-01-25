@@ -11,6 +11,7 @@ import { YooKassaClient } from "./integrations/yookassa/yooKassaClient";
 import { CryptoBotClient } from "./integrations/cryptobot/cryptoBotClient";
 import { PaymentService } from "./modules/payments/paymentService";
 import { registerWebhooks } from "./http/webhooks";
+import { registerSubscriptionRoutes } from "./http/subscription";
 import { startSubscriptionWorker } from "./worker/subscriptionWorker";
 import { PromoService } from "./modules/promo/promoService";
 
@@ -76,6 +77,15 @@ async function main(): Promise<void> {
 
   app.get("/healthz", async () => ({ ok: true }));
   await registerWebhooks(app, { webhookToken: env.webhookToken, payments });
+  await registerSubscriptionRoutes(app, {
+    prisma,
+    subscriptions,
+    xui,
+    publicPanelBaseUrl: env.publicPanelBaseUrl,
+    telegramBotUrl: env.telegramBotUrl,
+    xuiInboundId: env.xuiInboundId,
+    xuiClientFlow: env.xuiClientFlow,
+  });
 
   await app.listen({ host: env.appHost, port: env.appPort });
   startSubscriptionWorker({
