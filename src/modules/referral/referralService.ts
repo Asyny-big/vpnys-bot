@@ -2,12 +2,13 @@ import type { PrismaClient } from "@prisma/client";
 import { addDays } from "../../utils/time";
 import { SubscriptionService } from "../subscription/subscriptionService";
 import type { BanService } from "../ban/banService";
+import type { AntiAbuseService } from "../antiAbuse/antiAbuseService";
 
 export const REFERRAL_REWARD_DAYS = 7;
 
 export type GrantReferralRewardResult =
   | Readonly<{ status: "applied"; inviterTelegramId: string }>
-  | Readonly<{ status: "skipped"; reason: "no_referrer" | "inviter_not_found" | "self_referral" | "already_rewarded" | "missing_subscription" | "blocked" }>;
+  | Readonly<{ status: "skipped"; reason: "no_referrer" | "inviter_not_found" | "self_referral" | "already_rewarded" | "missing_subscription" | "blocked" | "anti_abuse" }>;
 
 function computePaidUntilBase(subscription: { expiresAt: Date | null; paidUntil: Date | null }, now: Date): Date {
   const paidUntilBase = subscription.paidUntil && subscription.paidUntil.getTime() > now.getTime() ? subscription.paidUntil : now;
@@ -20,6 +21,7 @@ export class ReferralService {
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
     private readonly bans: BanService,
+    private readonly antiAbuse: AntiAbuseService,
   ) {}
 
   /**
@@ -60,6 +62,21 @@ export class ReferralService {
     }
 
     const reward = await this.prisma.$transaction(async (tx) => {
+      let invitedTelegramIdBig: bigint;
+      try {
+        invitedTelegramIdBig = BigInt(invited.telegramId);
+      } catch {
+        throw new Error(`Invalid invited.telegramId: ${invited.telegramId}`);
+      }
+
+      const anti = await tx.antiAbuseRegistry.upsert({
+        where: { telegramId: invitedTelegramIdBig },
+        create: { telegramId: invitedTelegramIdBig, hadTrial: false, hadReferralBonus: false },
+        update: {},
+        select: { hadReferralBonus: true },
+      });
+      if (anti.hadReferralBonus) return { status: "skipped", reason: "anti_abuse" } as const;
+
       let referral = await tx.referral.findUnique({
         where: { invitedId: invited.id },
         select: { id: true, rewardGiven: true },
@@ -101,6 +118,7 @@ export class ReferralService {
       });
       if (finalized.count !== 1) throw new ReferralAlreadyRewardedError();
 
+      await this.antiAbuse.markReferralBonusGrantedTx(tx, invited.telegramId);
       return { status: "applied" } as const;
     }).catch((e: any) => {
       if (e?.name === "ReferralAlreadyRewardedError") {

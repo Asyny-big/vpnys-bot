@@ -146,3 +146,11 @@ model BlockedUser {
   reason     String?
   createdAt  DateTime @default(now())
 }
+
+model AntiAbuseRegistry {
+  id               Int      @id @default(autoincrement())
+  telegramId        BigInt   @unique
+  hadTrial          Boolean  @default(false)
+  hadReferralBonus  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+}

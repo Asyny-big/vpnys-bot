@@ -15,8 +15,9 @@ import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 import { REFERRAL_REWARD_DAYS } from "../modules/referral/referralService";
 import type { ReferralService } from "../modules/referral/referralService";
-import type { UserAdminService } from "../modules/admin/userAdminService";
 import type { BanService } from "../modules/ban/banService";
+import type { AdminUserDeletionService } from "../modules/admin/userDeletionService";
+import type { AdminUserBanService } from "../modules/admin/userBanService";
 
 export type BotDeps = Readonly<{
   botToken: string;
@@ -27,7 +28,8 @@ export type BotDeps = Readonly<{
   payments: PaymentService;
   promos: PromoService;
   referrals: ReferralService;
-  adminUsers: UserAdminService;
+  adminDeletion: AdminUserDeletionService;
+  adminBans: AdminUserBanService;
   bans: BanService;
   backendPublicUrl: string;
   offerVersion: string;
@@ -803,25 +805,16 @@ export function buildBot(deps: BotDeps): Bot {
 
     const adminTelegramId = String(ctx.from.id);
     try {
-      // IMPORTANT: delete also implies BAN to prevent re-registration abuse.
-      const result = await deps.adminUsers.banUserByTelegramId({ adminTelegramId, targetTelegramId, reason: "deleted_by_admin" });
+      const result = await deps.adminDeletion.deleteUserWithoutBan({ adminTelegramId, targetTelegramId });
+      if (result.status === "not_found") {
+        await replyOrEdit(ctx, "ℹ️ Пользователь не найден");
+        return;
+      }
 
-      const xuiLine = !result.xui.attempted
-        ? "3x-ui: пропущено (нет данных в БД)"
-        : result.xui.ok
-          ? `3x-ui: ok (${result.xui.method})`
-          : `3x-ui: ошибка (${result.xui.method})`;
-
-      const dbLine = result.deletedFromDb ? "БД: ok" : "БД: пользователь не найден (только блокировка)";
-      const adminText = [
-        `✅ Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> удалён и заблокирован`,
-        dbLine,
-        escapeHtml(xuiLine),
-      ].join("\n");
-
-      await replyOrEdit(ctx, adminText, { parse_mode: "HTML" });
-
-      await ctx.api.sendMessage(Number(result.targetTelegramId), "Ваш аккаунт LisVPN был удалён администратором").catch(() => {});
+      await replyOrEdit(ctx, `🧹 Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> удалён (без бана)`, { parse_mode: "HTML" });
+      await ctx.api
+        .sendMessage(Number(result.targetTelegramId), "Ваш аккаунт LisVPN был удалён администратором. Вы можете зарегистрироваться снова: /start")
+        .catch(() => {});
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error("delete_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
@@ -852,10 +845,13 @@ export function buildBot(deps: BotDeps): Bot {
 
     const adminTelegramId = String(ctx.from.id);
     try {
-      const result = await deps.adminUsers.banUserByTelegramId({ adminTelegramId, targetTelegramId, ...(reason ? { reason } : {}) });
-      const reasonLine = result.reason ? `\nПричина: ${escapeHtml(result.reason)}` : "";
-      const extraLine = result.deletedFromDb ? "" : "\nПользователь в БД не найден — применена только блокировка.";
-      await replyOrEdit(ctx, `\u26D4 Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> заблокирован${reasonLine}${extraLine}`, { parse_mode: "HTML" });
+      const result = await deps.adminBans.banUserByTelegramId({ adminTelegramId, targetTelegramId, ...(reason ? { reason } : {}) });
+      const reasonFinal = (result.reason ?? reason ?? "").trim() || "не указана";
+      await replyOrEdit(
+        ctx,
+        [`⛔ Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> заблокирован`, `Причина: ${escapeHtml(reasonFinal)}`].join("\n"),
+        { parse_mode: "HTML" },
+      );
       await ctx.api.sendMessage(Number(result.targetTelegramId), blockedText).catch(() => {});
     } catch (e: any) {
       // eslint-disable-next-line no-console
@@ -882,10 +878,10 @@ export function buildBot(deps: BotDeps): Bot {
 
     const adminTelegramId = String(ctx.from.id);
     try {
-      const result = await deps.adminUsers.unbanUserByTelegramId({ adminTelegramId, targetTelegramId });
+      const result = await deps.adminBans.unbanUserByTelegramId({ adminTelegramId, targetTelegramId });
       await replyOrEdit(
         ctx,
-        result.removed ? `✅ Пользователь <code>${escapeHtml(targetTelegramId)}</code> разблокирован` : "ℹ️ Пользователь не был заблокирован",
+        result.removed ? `🔓 Пользователь <code>${escapeHtml(targetTelegramId)}</code> разблокирован` : "ℹ️ Пользователь не был заблокирован",
         { parse_mode: "HTML" },
       );
     } catch (e: any) {
