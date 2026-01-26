@@ -39,14 +39,13 @@ export type SyncReturnPaymentResult = Readonly<{
   status: "not_found" | "not_configured" | PaymentStatus;
 }>;
 
-const YOOKASSA_RETURN_URL = "https://t.me/lisvpnapp_bot";
-
 export class PaymentService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
     private readonly deps: Readonly<{
       telegramBotToken?: string;
+      telegramBotUrl?: string;
       yookassa?: YooKassaClient;
       cryptobot?: CryptoBotClient;
       paymentsReturnUrl?: string;
@@ -171,7 +170,8 @@ export class PaymentService {
   }
 
   private buildYooKassaReturnUrl(paymentId: string): string {
-    const base = this.deps.paymentsReturnUrl ?? YOOKASSA_RETURN_URL;
+    const base = this.deps.paymentsReturnUrl ?? this.deps.telegramBotUrl;
+    if (!base) throw new Error("PAYMENTS_RETURN_URL (or TELEGRAM_BOT_URL) is not configured");
     try {
       const url = new URL(base);
       const host = url.hostname.toLowerCase();
@@ -209,7 +209,7 @@ export class PaymentService {
     const remote = await this.deps.yookassa.getPayment(providerPaymentId);
     const rawWebhook = this.toJsonString({ source: "return_sync", remote });
 
-    if (remote.status === "succeeded") {
+    if (remote.status === "succeeded" && remote.paid) {
       await this.prisma.payment.updateMany({
         where: { id: payment.id, status: PaymentStatus.PENDING },
         data: { status: PaymentStatus.SUCCEEDED, paidAt: new Date(), rawWebhook },
@@ -272,6 +272,7 @@ export class PaymentService {
 
     if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
+      this.requireOfferAccepted(user);
 
       const planRubRaw = this.deps.cryptobotPlanRubByDays?.[params.planDays] ?? this.getPlanRubOrThrow(params.planDays);
       if (!Number.isFinite(planRubRaw) || planRubRaw <= 0) throw new Error(`CRYPTOBOT_PLAN_${params.planDays}_RUB is not configured`);
@@ -313,6 +314,7 @@ export class PaymentService {
   async createSubscriptionCheckout(params: CreateSubscriptionCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     const subscription = await this.subscriptions.ensureForUser(user);
+    this.requireOfferAccepted(user);
 
     const quoted = await this.quoteSubscription({
       telegramId: params.telegramId,
@@ -404,6 +406,7 @@ export class PaymentService {
   async createDeviceSlotCheckout(params: CreateDeviceSlotCheckoutParams): Promise<CreateCheckoutResult> {
     const user = await this.getUserOrThrow(params.telegramId);
     const sub = await this.subscriptions.ensureForUser(user);
+    this.requireOfferAccepted(user);
     if (clampDeviceLimit(sub.deviceLimit) >= MAX_DEVICE_LIMIT) {
       throw new Error("Device limit reached");
     }
@@ -427,7 +430,7 @@ export class PaymentService {
 
       const created = await this.deps.yookassa.createPayment({
         amountRub: EXTRA_DEVICE_RUB,
-        description: safeYooKassaDescription(30),
+        description: "Дополнительное устройство (LisVPN)",
         returnUrl: this.buildYooKassaReturnUrl(payment.id),
         idempotenceKey: payment.id,
         metadata: { userId: user.id, telegramId: user.telegramId, paymentId: payment.id, type: PaymentType.DEVICE_SLOT, deviceSlots: "1" },
@@ -577,6 +580,17 @@ export class PaymentService {
     const status = event?.object?.status;
     if (!paymentId || typeof paymentId !== "string") return;
     if (status !== "succeeded") return;
+
+    // Webhooks must not be trusted blindly: this endpoint has no shared secret.
+    // Verify payment status with YooKassa API before granting access.
+    if (!this.deps.yookassa) return;
+    try {
+      const remote = await this.deps.yookassa.getPayment(paymentId);
+      if (remote.id !== paymentId) return;
+      if (remote.status !== "succeeded" || remote.paid !== true) return;
+    } catch {
+      return;
+    }
 
     const metadataPaymentId = event?.object?.metadata?.paymentId;
 

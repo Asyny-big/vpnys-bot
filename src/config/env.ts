@@ -48,6 +48,8 @@ type Env = Readonly<{
   workerIntervalSeconds: number;
 }>;
 
+const LOG_LEVELS: ReadonlySet<Env["logLevel"]> = new Set(["fatal", "error", "warn", "info", "debug", "trace"]);
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`Missing required env: ${name}`);
@@ -68,20 +70,22 @@ function parseIdSet(value: string | undefined): ReadonlySet<string> {
   return new Set(ids);
 }
 
-function asInt(name: string, value: string): number {
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) throw new Error(`Invalid int env ${name}: ${value}`);
+function asIntStrict(name: string, value: string): number {
+  const raw = value.trim();
+  if (!/^-?\d+$/.test(raw)) throw new Error(`Invalid int env ${name}: ${value}`);
+  const parsed = Number(raw);
+  if (!Number.isInteger(parsed)) throw new Error(`Invalid int env ${name}: ${value}`);
   return parsed;
 }
 
 function asNumber(name: string, value: string): number {
-  const parsed = Number(value);
+  const parsed = Number(value.trim());
   if (!Number.isFinite(parsed)) throw new Error(`Invalid number env ${name}: ${value}`);
   return parsed;
 }
 
 function requirePositiveInt(name: string): number {
-  const value = asInt(name, required(name));
+  const value = asIntStrict(name, required(name));
   if (value <= 0) throw new Error(`${name} must be > 0 (got: ${value})`);
   return value;
 }
@@ -89,7 +93,7 @@ function requirePositiveInt(name: string): number {
 function optionalPositiveInt(name: string): number | undefined {
   const raw = optional(name);
   if (raw === undefined) return undefined;
-  const value = asInt(name, raw);
+  const value = asIntStrict(name, raw);
   if (value <= 0) throw new Error(`${name} must be > 0 (got: ${value})`);
   return value;
 }
@@ -130,7 +134,11 @@ export function loadEnv(): Env {
     throw new Error(`Invalid NODE_ENV: ${nodeEnvRaw}`);
   }
 
-  const logLevel = (process.env.LOG_LEVEL ?? "info") as Env["logLevel"];
+  const logLevelRaw = (process.env.LOG_LEVEL ?? "info").trim() as Env["logLevel"];
+  if (!LOG_LEVELS.has(logLevelRaw)) {
+    throw new Error(`Invalid LOG_LEVEL: ${process.env.LOG_LEVEL ?? ""}`);
+  }
+  const logLevel = logLevelRaw;
 
   const xuiBaseUrl = ensureUrl("XUI_BASE_URL", required("XUI_BASE_URL"));
   ensureXuiLocalhost(xuiBaseUrl);
@@ -186,7 +194,11 @@ export function loadEnv(): Env {
     logLevel,
 
     appHost: process.env.APP_HOST ?? "0.0.0.0",
-    appPort: asInt("APP_PORT", process.env.APP_PORT ?? "3000"),
+    appPort: (() => {
+      const port = asIntStrict("APP_PORT", process.env.APP_PORT ?? "3000");
+      if (port < 1 || port > 65535) throw new Error(`APP_PORT must be 1..65535 (got: ${port})`);
+      return port;
+    })(),
 
     databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
@@ -201,7 +213,7 @@ export function loadEnv(): Env {
     xuiBaseUrl,
     xuiUsername: required("XUI_USERNAME"),
     xuiPassword: required("XUI_PASSWORD"),
-    xuiInboundId: asInt("XUI_INBOUND_ID", required("XUI_INBOUND_ID")),
+    xuiInboundId: requirePositiveInt("XUI_INBOUND_ID"),
     xuiClientFlow: optional("XUI_CLIENT_FLOW"),
 
     webhookToken: required("WEBHOOK_TOKEN"),
@@ -223,6 +235,10 @@ export function loadEnv(): Env {
     cryptobotPlan180Rub,
     cryptobotDeviceSlotRub,
 
-    workerIntervalSeconds: asInt("WORKER_INTERVAL_SECONDS", process.env.WORKER_INTERVAL_SECONDS ?? "300")
+    workerIntervalSeconds: (() => {
+      const seconds = asIntStrict("WORKER_INTERVAL_SECONDS", process.env.WORKER_INTERVAL_SECONDS ?? "300");
+      if (seconds <= 0) throw new Error(`WORKER_INTERVAL_SECONDS must be > 0 (got: ${seconds})`);
+      return seconds;
+    })(),
   };
 }

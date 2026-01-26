@@ -45,6 +45,7 @@ async function main(): Promise<void> {
 
   const payments = new PaymentService(prisma, subscriptions, {
     telegramBotToken: env.telegramBotToken,
+    telegramBotUrl: env.telegramBotUrl,
     yookassa,
     cryptobot,
     paymentsReturnUrl: env.paymentsReturnUrl,

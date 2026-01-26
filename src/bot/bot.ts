@@ -562,7 +562,7 @@ export function buildBot(deps: BotDeps): Bot {
 
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
-      if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
+      if (e?.name === "OfferNotAcceptedError") {
         await showOfferOnceAndRecord(ctx, String(ctx.from.id));
         const created = await deps.payments.createSubscriptionCheckout({
           telegramId: String(ctx.from.id),
@@ -1122,7 +1122,7 @@ export function buildBot(deps: BotDeps): Bot {
 
       await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
     } catch (e: any) {
-      if (providerRaw === "yoo" && e?.name === "OfferNotAcceptedError") {
+      if (e?.name === "OfferNotAcceptedError") {
         await showOfferOnceAndRecord(ctx, String(ctx.from.id));
         const created = await deps.payments.createDeviceSlotCheckout({
           telegramId: String(ctx.from.id),
