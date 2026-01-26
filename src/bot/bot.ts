@@ -2,6 +2,7 @@
 import type { InlineKeyboardButton } from "grammy/types";
 import type { PrismaClient } from "@prisma/client";
 import path from "node:path";
+import { URL } from "node:url";
 import { MAIN_KEYBOARD } from "./keyboard";
 import type { OnboardingService } from "../modules/onboarding/onboardingService";
 import type { SubscriptionService } from "../modules/subscription/subscriptionService";
@@ -12,14 +13,18 @@ import { formatRuDateTime, formatRuDayMonth } from "../domain/humanDate";
 import { isOfferAccepted, shortPublicOfferText } from "../domain/offer";
 import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
+import { REFERRAL_REWARD_DAYS } from "../modules/referral/referralService";
+import type { ReferralService } from "../modules/referral/referralService";
 
 export type BotDeps = Readonly<{
   botToken: string;
+  telegramBotUrl: string;
   prisma: PrismaClient;
   onboarding: OnboardingService;
   subscriptions: SubscriptionService;
   payments: PaymentService;
   promos: PromoService;
+  referrals: ReferralService;
   backendPublicUrl: string;
   offerVersion: string;
   adminUsername?: string;
@@ -117,6 +122,13 @@ export function buildBot(deps: BotDeps): Bot {
     return date;
   };
 
+  const buildReferralLink = (telegramId: string): string => {
+    // Format: https://t.me/<BOT_USERNAME>?start=ref_<INVITER_TELEGRAM_ID>
+    const url = new URL(deps.telegramBotUrl);
+    url.searchParams.set("start", `ref_${telegramId}`);
+    return url.toString();
+  };
+
   const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
     const opts = { caption, reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } };
     try {
@@ -193,6 +205,7 @@ export function buildBot(deps: BotDeps): Bot {
     const firstName = escapeHtml(String(ctx.from?.first_name ?? "Пользователь"));
     const username = ctx.from?.username ? `@${escapeHtml(String(ctx.from.username))}` : "";
     const telegramId = String(ctx.from?.id ?? "");
+    const referralLink = buildReferralLink(telegramId);
 
     let active = false;
     let expiresAtLabel = "";
@@ -230,6 +243,7 @@ export function buildBot(deps: BotDeps): Bot {
       `Имя: <b>${firstName}</b>`,
       username ? `Username: <b>${username}</b>` : "",
       `Telegram ID: <code>${escapeHtml(telegramId)}</code>`,
+      `🔗 Реферальная ссылка: ${escapeHtml(referralLink)}`,
       "",
       `🔐 <b>VPN</b>: ${statusLine}`,
       deviceLimit ? `📱 <b>Устройства</b>: <b>${escapeHtml(deviceLimit)}</b>` : "",
@@ -246,10 +260,46 @@ export function buildBot(deps: BotDeps): Bot {
 
     kb.text("📱 Устройства", "nav:devices").text("💳 Подписка", "nav:sub").row();
     kb.text("🎁 Ввести промокод", "nav:promo").row();
+    kb.text("👥 Мои друзья", "nav:friends").row();
     kb.text("📄 Оферта", "nav:offer").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const showFriends = async (ctx: any): Promise<void> => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    const rows = await deps.referrals.listInvitedFriends({ inviterUserId: required.user.id, take: 50 });
+    if (!rows.length) {
+      await replyOrEdit(ctx, "Вы пока никого не пригласили", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const now = new Date();
+    const maxToShow = 30;
+    const shown = rows.slice(0, maxToShow);
+
+    const lines: string[] = [];
+    for (let i = 0; i < shown.length; i++) {
+      const row = shown[i];
+      let invitedLabel = `ID ${row.invitedTelegramId}`;
+      try {
+        const chat: any = await ctx.api.getChat(Number(row.invitedTelegramId));
+        invitedLabel = chat?.username ? `@${chat.username}` : chat?.first_name ?? invitedLabel;
+      } catch {
+        // ignore
+      }
+      const registeredAt = formatRuDayMonth(row.invitedCreatedAt, now);
+      const rewardLabel = row.rewardGiven ? `+${REFERRAL_REWARD_DAYS} дней` : "ожидает";
+      lines.push(`${i + 1}) ${escapeHtml(invitedLabel)} — ${escapeHtml(registeredAt)} (${rewardLabel})`);
+    }
+
+    const footer = rows.length > maxToShow ? `\n\nПоказаны последние ${maxToShow} из ${rows.length}.` : "";
+    const text = ["👥 <b>Мои друзья</b>", "", ...lines].join("\n") + footer;
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
   const showMySubscription = async (ctx: any): Promise<void> => {
@@ -561,49 +611,35 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, shortPublicOfferText(), { reply_markup: backToCabinetKeyboard(deps) });
   };
 
-  const showOfferOnceAndRecord = async (ctx: any, telegramId: string): Promise<boolean> => {
+  const showOfferOnceAndRecord = async (ctx: any, telegramId: string): Promise<Date | null> => {
     const existing = await deps.prisma.user.findUnique({
       where: { telegramId },
       select: { id: true, offerAcceptedAt: true },
     });
-    if (existing?.offerAcceptedAt) return false;
+    if (existing?.offerAcceptedAt) return null;
 
     try {
       await ctx.reply(shortPublicOfferText(), { link_preview_options: { is_disabled: true } });
     } catch {
-      return false;
+      return null;
     }
 
     const now = new Date();
-    if (!existing) {
-      try {
-        await deps.prisma.user.create({
-          data: { telegramId, offerAcceptedAt: now, offerVersion: deps.offerVersion },
-        });
-      } catch (e: any) {
-        if (e?.code !== "P2002") throw e;
-        await deps.prisma.user.updateMany({
-          where: { telegramId, offerAcceptedAt: null },
-          data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
-        });
-      }
-      return true;
-    }
+    if (!existing) return now;
 
     await deps.prisma.user.updateMany({
       where: { id: existing.id, offerAcceptedAt: null },
       data: { offerAcceptedAt: now, offerVersion: deps.offerVersion },
     });
-    return true;
+    return now;
   };
 
   bot.command("start", async (ctx) => {
     if (!ctx.from?.id) return;
     const telegramId = String(ctx.from.id);
 
-    await showOfferOnceAndRecord(ctx, telegramId);
-
     const startParam = typeof (ctx as any).match === "string" ? String((ctx as any).match).trim() : "";
+    const offerAcceptedAt = await showOfferOnceAndRecord(ctx, telegramId);
     let paymentSyncStatus: "not_found" | "not_configured" | PaymentStatus | undefined;
     if (startParam.startsWith("pay_")) {
       const paymentId = startParam.slice("pay_".length).trim();
@@ -617,7 +653,7 @@ export function buildBot(deps: BotDeps): Bot {
       }
     }
 
-    const result = await deps.onboarding.handleStart(telegramId);
+    const result = await deps.onboarding.handleStart({ telegramId, startParam, offerAcceptedAt });
 
     const now = Date.now();
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
@@ -628,6 +664,18 @@ export function buildBot(deps: BotDeps): Bot {
     if (paymentSyncStatus === PaymentStatus.PENDING) extraLines.push("⏳ Оплата обрабатывается. Если ты оплатил, подожди пару минут.");
     if (paymentSyncStatus === "not_configured") extraLines.push("ℹ️ Проверка оплаты недоступна. Я включу VPN, как только получу уведомление.");
     if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
+    if (result.referralReward) {
+      try {
+        const inviterChat: any = await ctx.api.getChat(Number(result.referralReward.inviterTelegramId));
+        const inviterLabel = inviterChat?.username ? `@${inviterChat.username}` : inviterChat?.first_name ?? `ID ${result.referralReward.inviterTelegramId}`;
+        extraLines.push(`🎉 Вас пригласил ${inviterLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`);
+
+        const invitedLabel = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? `ID ${telegramId}`;
+        await ctx.api.sendMessage(Number(result.referralReward.inviterTelegramId), `🎉 У вас новый друг: ${invitedLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`).catch(() => {});
+      } catch {
+        // Best-effort: registration and reward are already done in backend.
+      }
+    }
     if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
 
     await sendStartScreen(ctx, buildStartCaption(extraLines));
@@ -660,6 +708,10 @@ export function buildBot(deps: BotDeps): Bot {
     }
     if (result.status === "not_found") {
       await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "cooldown") {
+      await replyOrEdit(ctx, "Промокод можно активировать раз в 1 час. Попробуйте позже", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
     if (result.status === "already_used") {
@@ -764,6 +816,8 @@ export function buildBot(deps: BotDeps): Bot {
   });
   bot.hears("🆘 Поддержка", showSupport);
 
+  bot.hears("\uD83D\uDC65 \u041C\u043E\u0438 \u0434\u0440\u0443\u0437\u044C\u044F", showFriends);
+
   bot.callbackQuery("nav:cabinet", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showCabinet(ctx);
@@ -779,6 +833,10 @@ export function buildBot(deps: BotDeps): Bot {
   bot.callbackQuery("nav:devices", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showDevices(ctx);
+  });
+  bot.callbackQuery("nav:friends", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showFriends(ctx);
   });
   bot.callbackQuery("nav:guide", async (ctx) => {
     await ctx.answerCallbackQuery();

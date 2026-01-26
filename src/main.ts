@@ -14,6 +14,7 @@ import { registerWebhooks } from "./http/webhooks";
 import { registerSubscriptionRoutes } from "./http/subscription";
 import { startSubscriptionWorker } from "./worker/subscriptionWorker";
 import { PromoService } from "./modules/promo/promoService";
+import { ReferralService } from "./modules/referral/referralService";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -27,7 +28,8 @@ async function main(): Promise<void> {
   const xui = new ThreeXUiService(xuiApi);
 
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
-  const onboarding = new OnboardingService(prisma, subscriptions, env.backendPublicUrl, { offerVersion: env.offerVersion });
+  const referrals = new ReferralService(prisma, subscriptions);
+  const onboarding = new OnboardingService(prisma, subscriptions, referrals, env.backendPublicUrl, { offerVersion: env.offerVersion });
 
   const yookassa =
     env.yookassaShopId && env.yookassaSecretKey
@@ -65,7 +67,9 @@ async function main(): Promise<void> {
     subscriptions,
     payments,
     promos,
+    referrals,
     backendPublicUrl: env.backendPublicUrl,
+    telegramBotUrl: env.telegramBotUrl,
     offerVersion: env.offerVersion,
     adminUsername: env.adminUsername,
     adminUserIds: env.adminUserIds,

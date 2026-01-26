@@ -15,10 +15,24 @@ model User {
   trialGrantedAt DateTime?
   offerAcceptedAt DateTime?
   offerVersion    String?
+  // Anti-abuse: any promo code activation is limited to once per hour per user.
+  lastPromoActivatedAt DateTime?
+
+  // Referral system.
+  referredById  String?
+  referredBy    User?          @relation("UserReferrals", fields: [referredById], references: [id], onDelete: SetNull)
+  referrals     User[]         @relation("UserReferrals")
+  // Public referral code (used in links); currently equals telegramId.
+  referralCode  String         @unique
 
   subscription   Subscription?
   payments       Payment[]
   promoUses      PromoCodeUse[]
+
+  invitedReferrals Referral[]  @relation("ReferralInviter")
+  invitedByReferral Referral?  @relation("ReferralInvited")
+
+  @@index([referredById])
 }
 
 model Subscription {
@@ -111,4 +125,17 @@ model PromoCodeUse {
 
   @@unique([promoId, userId])
   @@index([userId, usedAt])
+}
+
+model Referral {
+  id          String   @id @default(cuid())
+  inviterId   String
+  invitedId   String   @unique
+  rewardGiven Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  inviter     User     @relation("ReferralInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invited     User     @relation("ReferralInvited", fields: [invitedId], references: [id], onDelete: Cascade)
+
+  @@index([inviterId, createdAt])
 }

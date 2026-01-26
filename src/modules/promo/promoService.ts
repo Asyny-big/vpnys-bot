@@ -13,6 +13,7 @@ export type ApplyPromoResult =
   | Readonly<{ status: "applied"; promo: PromoCode; paidUntil: Date }>
   | Readonly<{ status: "offer_required" }>
   | Readonly<{ status: "not_found" }>
+  | Readonly<{ status: "cooldown" }>
   | Readonly<{ status: "expired"; promo: PromoCode }>
   | Readonly<{ status: "exhausted"; promo: PromoCode }>
   | Readonly<{ status: "already_used"; promo: PromoCode }>;
@@ -21,6 +22,13 @@ class PromoClaimFailedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "PromoClaimFailedError";
+  }
+}
+
+class PromoAlreadyUsedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PromoAlreadyUsedError";
   }
 }
 
@@ -71,6 +79,7 @@ export class PromoService {
     if (!code.length) throw new Error("Empty promo code");
 
     const now = new Date();
+    const cooldownBoundary = new Date(now.getTime() - 60 * 60 * 1000);
 
     const user = await this.prisma.user.findUnique({
       where: { id: params.userId },
@@ -87,12 +96,32 @@ export class PromoService {
         if (promo.expiresAt && promo.expiresAt.getTime() <= now.getTime()) return { status: "expired", promo };
         if (promo.maxUses !== null && promo.usedCount >= promo.maxUses) return { status: "exhausted", promo };
 
+        // "Already used" is checked before we reserve the global 1h cooldown window.
+        // This keeps lastPromoActivatedAt unchanged for no-op requests.
+        const alreadyUsed = await tx.promoCodeUse.findUnique({
+          where: { promoId_userId: { promoId: promo.id, userId: params.userId } },
+          select: { id: true },
+        });
+        if (alreadyUsed) return { status: "already_used", promo };
+
+        // Global anti-abuse: allow ANY promo code activation at most once per hour per user.
+        // This is race-safe on SQLite because the update acquires a write lock; concurrent attempts serialize.
+        const reserved = await tx.user.updateMany({
+          where: {
+            id: params.userId,
+            OR: [{ lastPromoActivatedAt: null }, { lastPromoActivatedAt: { lte: cooldownBoundary } }],
+          },
+          data: { lastPromoActivatedAt: now },
+        });
+        if (reserved.count !== 1) return { status: "cooldown" };
+
         try {
           await tx.promoCodeUse.create({
             data: { promoId: promo.id, userId: params.userId },
           });
         } catch (e: any) {
-          if (e?.code === "P2002") return { status: "already_used", promo };
+          // If this happens, rollback the cooldown reservation as well.
+          if (e?.code === "P2002") throw new PromoAlreadyUsedError("Promo already used");
           throw e;
         }
 
@@ -119,6 +148,11 @@ export class PromoService {
         return { status: "applied", promo, paidUntil };
       });
     } catch (e: any) {
+      if (e instanceof PromoAlreadyUsedError) {
+        const promo = await this.prisma.promoCode.findUnique({ where: { code } });
+        if (!promo) return { status: "not_found" };
+        return { status: "already_used", promo };
+      }
       if (e instanceof PromoClaimFailedError) {
         const promo = await this.prisma.promoCode.findUnique({ where: { code } });
         if (!promo) return { status: "not_found" };
