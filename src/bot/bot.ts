@@ -210,7 +210,6 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    const url = `https://t.me/${encodeURIComponent(username)}`;
     const text = [`Напиши нам сюда 👇`, url].join("\n");
 
     const kb = new InlineKeyboard().url("🆘 Открыть чат", url).row().text("🏠 Личный кабинет", "nav:cabinet");
