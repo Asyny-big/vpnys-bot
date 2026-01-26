@@ -1,12 +1,13 @@
 import type { PrismaClient } from "@prisma/client";
 import { addDays } from "../../utils/time";
 import { SubscriptionService } from "../subscription/subscriptionService";
+import type { BanService } from "../ban/banService";
 
 export const REFERRAL_REWARD_DAYS = 7;
 
 export type GrantReferralRewardResult =
   | Readonly<{ status: "applied"; inviterTelegramId: string }>
-  | Readonly<{ status: "skipped"; reason: "no_referrer" | "inviter_not_found" | "self_referral" | "already_rewarded" | "missing_subscription" }>;
+  | Readonly<{ status: "skipped"; reason: "no_referrer" | "inviter_not_found" | "self_referral" | "already_rewarded" | "missing_subscription" | "blocked" }>;
 
 function computePaidUntilBase(subscription: { expiresAt: Date | null; paidUntil: Date | null }, now: Date): Date {
   const paidUntilBase = subscription.paidUntil && subscription.paidUntil.getTime() > now.getTime() ? subscription.paidUntil : now;
@@ -18,6 +19,7 @@ export class ReferralService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
+    private readonly bans: BanService,
   ) {}
 
   /**
@@ -32,11 +34,13 @@ export class ReferralService {
     const invited = await this.prisma.user.findUnique({ where: { id: params.invitedUserId } });
     if (!invited?.referredById) return { status: "skipped", reason: "no_referrer" };
     if (invited.referredById === invited.id) return { status: "skipped", reason: "self_referral" };
+    if (await this.bans.isBlocked(invited.telegramId)) return { status: "skipped", reason: "blocked" };
 
     const inviter = await this.prisma.user.findUnique({
       where: { id: invited.referredById },
     });
     if (!inviter) return { status: "skipped", reason: "inviter_not_found" };
+    if (await this.bans.isBlocked(inviter.telegramId)) return { status: "skipped", reason: "blocked" };
 
     // Ensure subscriptions exist (may call 3x-ui on first use).
     // This is intentionally done outside the reward transaction.

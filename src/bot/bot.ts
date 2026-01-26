@@ -15,6 +15,8 @@ import { escapeHtml, formatDevices, formatRub } from "./ui";
 import type { PromoService } from "../modules/promo/promoService";
 import { REFERRAL_REWARD_DAYS } from "../modules/referral/referralService";
 import type { ReferralService } from "../modules/referral/referralService";
+import type { UserAdminService } from "../modules/admin/userAdminService";
+import type { BanService } from "../modules/ban/banService";
 
 export type BotDeps = Readonly<{
   botToken: string;
@@ -25,6 +27,8 @@ export type BotDeps = Readonly<{
   payments: PaymentService;
   promos: PromoService;
   referrals: ReferralService;
+  adminUsers: UserAdminService;
+  bans: BanService;
   backendPublicUrl: string;
   offerVersion: string;
   adminUsername?: string;
@@ -102,12 +106,38 @@ export function buildBot(deps: BotDeps): Bot {
   const inflightTtlMs = 30_000;
   const startPhotoPath = path.join(process.cwd(), "imag", "lis.png");
   let startPhotoFileId: string | undefined;
+  const blockedText = "\u26D4 \u0412\u044B \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u044B \u0432 LisVPN";
 
   const isAdmin = (ctx: any): boolean => {
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
     return deps.adminUserIds.has(String(telegramId));
   };
+
+  const ensureNotBlocked = async (ctx: any, telegramId: string): Promise<boolean> => {
+    try {
+      const blocked = await deps.bans.isBlocked(telegramId);
+      if (!blocked) return true;
+      if (ctx.callbackQuery) {
+        await ctx.answerCallbackQuery({ text: blockedText, show_alert: true }).catch(() => {});
+      }
+      await replyOrEdit(ctx, blockedText, { reply_markup: MAIN_KEYBOARD });
+      return false;
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("ban check failed", { telegramId, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Временная ошибка. Попробуй ещё раз.", { reply_markup: MAIN_KEYBOARD });
+      return false;
+    }
+  };
+
+  bot.use(async (ctx, next) => {
+    const fromId = ctx.from?.id;
+    if (!fromId) return await next();
+    const telegramId = String(fromId);
+    if (!(await ensureNotBlocked(ctx, telegramId))) return;
+    return await next();
+  });
 
   const parseExpiresAt = (value: string): Date | null => {
     const trimmed = value.trim();
@@ -653,7 +683,16 @@ export function buildBot(deps: BotDeps): Bot {
       }
     }
 
-    const result = await deps.onboarding.handleStart({ telegramId, startParam, offerAcceptedAt });
+    let result: any;
+    try {
+      result = await deps.onboarding.handleStart({ telegramId, startParam, offerAcceptedAt });
+    } catch (e: any) {
+      if (e?.name === "UserBlockedError") {
+        await replyOrEdit(ctx, blockedText, { reply_markup: MAIN_KEYBOARD });
+        return;
+      }
+      throw e;
+    }
 
     const now = Date.now();
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
@@ -710,6 +749,10 @@ export function buildBot(deps: BotDeps): Bot {
       await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
+    if (result.status === "blocked") {
+      await replyOrEdit(ctx, blockedText, { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
     if (result.status === "cooldown") {
       await replyOrEdit(ctx, "Промокод можно активировать раз в 1 час. Попробуйте позже", { reply_markup: backToCabinetKeyboard(deps) });
       return;
@@ -735,6 +778,121 @@ export function buildBot(deps: BotDeps): Bot {
 
     // Best-effort: propagate paidUntil to 3x-ui right away, so panel shows the new date without waiting for the worker tick.
     await deps.subscriptions.syncFromXui(required.user).catch(() => {});
+  });
+
+  bot.command("delete_user", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Недостаточно прав");
+      return;
+    }
+    if (!ctx.from?.id) return;
+
+    const text = ctx.message?.text ?? "";
+    const args = text.trim().split(/\s+/).slice(1);
+    const targetTelegramId = String(args[0] ?? "").trim();
+
+    if (!/^\d{1,20}$/.test(targetTelegramId)) {
+      await replyOrEdit(ctx, "Формат: /delete_user <telegramId>");
+      return;
+    }
+
+    if (deps.adminUserIds.has(targetTelegramId)) {
+      await replyOrEdit(ctx, "⛔ Нельзя удалить администратора");
+      return;
+    }
+
+    const adminTelegramId = String(ctx.from.id);
+    try {
+      // IMPORTANT: delete also implies BAN to prevent re-registration abuse.
+      const result = await deps.adminUsers.banUserByTelegramId({ adminTelegramId, targetTelegramId, reason: "deleted_by_admin" });
+
+      const xuiLine = !result.xui.attempted
+        ? "3x-ui: пропущено (нет данных в БД)"
+        : result.xui.ok
+          ? `3x-ui: ok (${result.xui.method})`
+          : `3x-ui: ошибка (${result.xui.method})`;
+
+      const dbLine = result.deletedFromDb ? "БД: ok" : "БД: пользователь не найден (только блокировка)";
+      const adminText = [
+        `✅ Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> удалён и заблокирован`,
+        dbLine,
+        escapeHtml(xuiLine),
+      ].join("\n");
+
+      await replyOrEdit(ctx, adminText, { parse_mode: "HTML" });
+
+      await ctx.api.sendMessage(Number(result.targetTelegramId), "Ваш аккаунт LisVPN был удалён администратором").catch(() => {});
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("delete_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Не удалось удалить пользователя. Подробности в логах.");
+    }
+  });
+
+  bot.command("ban_user", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Недостаточно прав");
+      return;
+    }
+    if (!ctx.from?.id) return;
+
+    const text = ctx.message?.text ?? "";
+    const parts = text.trim().split(/\s+/).slice(1);
+    const targetTelegramId = String(parts[0] ?? "").trim();
+    const reason = parts.slice(1).join(" ").trim();
+
+    if (!/^\d{1,20}$/.test(targetTelegramId)) {
+      await replyOrEdit(ctx, "Формат: /ban_user <telegramId> [reason]");
+      return;
+    }
+    if (deps.adminUserIds.has(targetTelegramId)) {
+      await replyOrEdit(ctx, "⛔ Нельзя заблокировать администратора");
+      return;
+    }
+
+    const adminTelegramId = String(ctx.from.id);
+    try {
+      const result = await deps.adminUsers.banUserByTelegramId({ adminTelegramId, targetTelegramId, ...(reason ? { reason } : {}) });
+      const reasonLine = result.reason ? `\nПричина: ${escapeHtml(result.reason)}` : "";
+      const extraLine = result.deletedFromDb ? "" : "\nПользователь в БД не найден — применена только блокировка.";
+      await replyOrEdit(ctx, `\u26D4 Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> заблокирован${reasonLine}${extraLine}`, { parse_mode: "HTML" });
+      await ctx.api.sendMessage(Number(result.targetTelegramId), blockedText).catch(() => {});
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("ban_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Не удалось заблокировать пользователя. Подробности в логах.");
+    }
+  });
+
+  bot.command("unban_user", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Недостаточно прав");
+      return;
+    }
+    if (!ctx.from?.id) return;
+
+    const text = ctx.message?.text ?? "";
+    const parts = text.trim().split(/\s+/).slice(1);
+    const targetTelegramId = String(parts[0] ?? "").trim();
+
+    if (!/^\d{1,20}$/.test(targetTelegramId)) {
+      await replyOrEdit(ctx, "Формат: /unban_user <telegramId>");
+      return;
+    }
+
+    const adminTelegramId = String(ctx.from.id);
+    try {
+      const result = await deps.adminUsers.unbanUserByTelegramId({ adminTelegramId, targetTelegramId });
+      await replyOrEdit(
+        ctx,
+        result.removed ? `✅ Пользователь <code>${escapeHtml(targetTelegramId)}</code> разблокирован` : "ℹ️ Пользователь не был заблокирован",
+        { parse_mode: "HTML" },
+      );
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("unban_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Не удалось разблокировать пользователя. Подробности в логах.");
+    }
   });
 
   bot.command("addpromo", async (ctx) => {

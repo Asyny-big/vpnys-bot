@@ -15,6 +15,8 @@ import { registerSubscriptionRoutes } from "./http/subscription";
 import { startSubscriptionWorker } from "./worker/subscriptionWorker";
 import { PromoService } from "./modules/promo/promoService";
 import { ReferralService } from "./modules/referral/referralService";
+import { UserAdminService } from "./modules/admin/userAdminService";
+import { BanService } from "./modules/ban/banService";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -28,8 +30,9 @@ async function main(): Promise<void> {
   const xui = new ThreeXUiService(xuiApi);
 
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
-  const referrals = new ReferralService(prisma, subscriptions);
-  const onboarding = new OnboardingService(prisma, subscriptions, referrals, env.backendPublicUrl, { offerVersion: env.offerVersion });
+  const bans = new BanService(prisma);
+  const referrals = new ReferralService(prisma, subscriptions, bans);
+  const onboarding = new OnboardingService(prisma, subscriptions, bans, referrals, env.backendPublicUrl, { offerVersion: env.offerVersion });
 
   const yookassa =
     env.yookassaShopId && env.yookassaSecretKey
@@ -58,7 +61,8 @@ async function main(): Promise<void> {
     cryptobotDeviceSlotRub: env.cryptobotDeviceSlotRub,
   });
 
-  const promos = new PromoService(prisma, { offerVersion: env.offerVersion });
+  const promos = new PromoService(prisma, { offerVersion: env.offerVersion, bans });
+  const adminUsers = new UserAdminService(prisma, xui);
 
   const bot = buildBot({
     botToken: env.telegramBotToken,
@@ -68,6 +72,8 @@ async function main(): Promise<void> {
     payments,
     promos,
     referrals,
+    adminUsers,
+    bans,
     backendPublicUrl: env.backendPublicUrl,
     telegramBotUrl: env.telegramBotUrl,
     offerVersion: env.offerVersion,

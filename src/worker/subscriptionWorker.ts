@@ -150,6 +150,37 @@ export function startSubscriptionWorker(deps: {
           }
         });
       }
+
+      // Enforce bans: even if user rows are deleted, BlockedUser remains the source of truth.
+      // Best-effort only (must not break the subscription worker).
+      try {
+        const blocked = await deps.prisma.blockedUser.findMany({
+          select: { telegramId: true },
+          take: 500,
+        });
+        if (blocked.length) {
+          const emails = new Set<string>(blocked.map((b) => `tg:${String(b.telegramId)}`));
+          const inbounds = await deps.xui.listInbounds();
+          await runWithConcurrency(inbounds, 2, async (inbound) => {
+            try {
+              const clients = await deps.xui.listClients(inbound.id);
+              const matches = clients.filter((c) => c.enabled && emails.has(c.email));
+              await runWithConcurrency(matches, 10, async (client) => {
+                try {
+                  await deps.xui.disable(inbound.id, client.uuid);
+                  logger.info(`worker: banned client disabled email=${client.email}`);
+                } catch (e: any) {
+                  logger.error(`worker: failed to disable banned client email=${client.email}: ${e?.message ?? String(e)}`);
+                }
+              });
+            } catch (e: any) {
+              logger.error(`worker: ban enforcement failed inbound=${inbound.id}: ${e?.message ?? String(e)}`);
+            }
+          });
+        }
+      } catch (e: any) {
+        logger.error(`worker: ban enforcement tick failed: ${e?.message ?? String(e)}`);
+      }
     } catch (e: any) {
       logger.error(`worker: tick failed: ${e?.message ?? String(e)}`);
     } finally {

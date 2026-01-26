@@ -1,6 +1,7 @@
 import type { PrismaClient, PromoCode } from "@prisma/client";
 import { addDays } from "../../utils/time";
 import { isOfferAccepted } from "../../domain/offer";
+import type { BanService } from "../ban/banService";
 
 export type AddPromoParams = Readonly<{
   code: string;
@@ -13,6 +14,7 @@ export type ApplyPromoResult =
   | Readonly<{ status: "applied"; promo: PromoCode; paidUntil: Date }>
   | Readonly<{ status: "offer_required" }>
   | Readonly<{ status: "not_found" }>
+  | Readonly<{ status: "blocked" }>
   | Readonly<{ status: "cooldown" }>
   | Readonly<{ status: "expired"; promo: PromoCode }>
   | Readonly<{ status: "exhausted"; promo: PromoCode }>
@@ -39,7 +41,7 @@ function normalizePromoCode(raw: string): string {
 export class PromoService {
   constructor(
     private readonly prisma: PrismaClient,
-    private readonly deps: Readonly<{ offerVersion: string }>,
+    private readonly deps: Readonly<{ offerVersion: string; bans: BanService }>,
   ) {}
 
   normalize(code: string): string {
@@ -83,13 +85,24 @@ export class PromoService {
 
     const user = await this.prisma.user.findUnique({
       where: { id: params.userId },
-      select: { offerAcceptedAt: true, offerVersion: true },
+      select: { telegramId: true, offerAcceptedAt: true, offerVersion: true },
     });
     if (!user) throw new Error("User not found");
+    if (await this.deps.bans.isBlocked(user.telegramId)) return { status: "blocked" };
     if (!isOfferAccepted(user as any, this.deps.offerVersion)) return { status: "offer_required" };
+
+    let telegramIdBig: bigint;
+    try {
+      telegramIdBig = BigInt(user.telegramId);
+    } catch {
+      throw new Error(`Invalid user.telegramId: ${user.telegramId}`);
+    }
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        const blocked = await tx.blockedUser.findUnique({ where: { telegramId: telegramIdBig }, select: { id: true } });
+        if (blocked) return { status: "blocked" };
+
         const promo = await tx.promoCode.findUnique({ where: { code } });
         if (!promo) return { status: "not_found" };
 

@@ -139,3 +139,10 @@ model Referral {
 
   @@index([inviterId, createdAt])
 }
+
+model BlockedUser {
+  id         Int      @id @default(autoincrement())
+  telegramId BigInt   @unique
+  reason     String?
+  createdAt  DateTime @default(now())
+}

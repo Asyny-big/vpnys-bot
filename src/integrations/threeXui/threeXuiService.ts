@@ -411,4 +411,47 @@ export class ThreeXUiService {
   async enable(inboundId: number, uuid: string, deviceLimit?: number): Promise<void> {
     await this.updateClient(inboundId, uuid, { enabled: true, ...(deviceLimit !== undefined ? { deviceLimit } : {}) });
   }
+
+  /**
+   * Removes a client from an inbound on 3x-ui.
+   *
+   * 3x-ui/x-ui endpoint variants differ between versions; we attempt the most common ones.
+   * If all fail, caller may fall back to disable().
+   */
+  async deleteClient(inboundId: number, uuid: string): Promise<void> {
+    const body = JSON.stringify({ id: inboundId });
+    const attempt = async (path: string, requestBody: string = body): Promise<void> => {
+      await this.api.requestJson(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: requestBody,
+      });
+    };
+
+    // Primary endpoints used by most x-ui/3x-ui versions.
+    try {
+      await attempt(`/panel/api/inbounds/delClient/${encodeURIComponent(uuid)}`);
+      return;
+    } catch {
+      // continue
+    }
+
+    try {
+      await attempt(`/panel/api/inbounds/deleteClient/${encodeURIComponent(uuid)}`);
+      return;
+    } catch {
+      // continue
+    }
+
+    // Fallback endpoints without UUID in path (some versions).
+    const altBody = JSON.stringify({ id: inboundId, uuid });
+    try {
+      await attempt("/panel/api/inbounds/delClient", altBody);
+      return;
+    } catch {
+      // continue
+    }
+
+    await attempt("/panel/api/inbounds/deleteClient", altBody);
+  }
 }

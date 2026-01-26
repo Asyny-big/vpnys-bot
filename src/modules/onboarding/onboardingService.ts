@@ -4,6 +4,7 @@ import { SubscriptionService } from "../subscription/subscriptionService";
 import { PaymentStatus } from "../../db/values";
 import { isOfferAccepted } from "../../domain/offer";
 import { ReferralService } from "../referral/referralService";
+import { BanService } from "../ban/banService";
 
 export type StartResult = Readonly<{
   user: User;
@@ -27,6 +28,7 @@ export class OnboardingService {
   constructor(
     private readonly prisma: PrismaClient,
     private readonly subscriptions: SubscriptionService,
+    private readonly bans: BanService,
     private readonly referrals: ReferralService,
     private readonly backendPublicUrl: string,
     private readonly deps: Readonly<{ offerVersion: string }>,
@@ -35,6 +37,8 @@ export class OnboardingService {
   async handleStart(params: { telegramId: string; startParam?: string; offerAcceptedAt?: Date | null }): Promise<StartResult> {
     const telegramId = params.telegramId;
     const offerAcceptedAt = params.offerAcceptedAt ?? undefined;
+
+    await this.bans.assertNotBlocked(telegramId);
 
     // IMPORTANT: referral logic must run only on first-ever registration.
     // Therefore we must NOT pre-create the user row before checking /start ref_* parameter.
