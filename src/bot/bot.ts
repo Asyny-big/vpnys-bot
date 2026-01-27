@@ -45,19 +45,7 @@ export enum CheckoutFlow {
   PROMO = "promo",
 }
 
-type Support = Readonly<{
-  url?: string;
-}>;
-
-function support(deps: BotDeps): Support {
-  const username = deps.adminUsername?.replace(/^@/, "");
-  if (!username) return {};
-  return { url: `https://t.me/${encodeURIComponent(username)}` };
-}
-
 function supportButton(deps: BotDeps, label = "🆘 Поддержка"): InlineKeyboardButton {
-  const sup = support(deps);
-  if (sup.url) return { text: label, url: sup.url };
   return { text: label, callback_data: "nav:support" };
 }
 
@@ -86,18 +74,6 @@ function cabinetKeyboard(deps: BotDeps): InlineKeyboard {
     .text("🧾 Инструкция", "nav:guide")
     .row()
     .text("🆘 Написать в поддержку", "nav:support");
-
-  const sup = support(deps);
-  if (sup.url) {
-    return new InlineKeyboard()
-      .text("🔐 Моя подписка", "nav:sub")
-      .text("💳 Оформить подписку", "nav:buy")
-      .row()
-      .text("📱 Устройства", "nav:devices")
-      .text("🧾 Инструкция", "nav:guide")
-      .row()
-      .url("🆘 Написать в поддержку", sup.url);
-  }
 
   return kb;
 }
@@ -204,17 +180,36 @@ export function buildBot(deps: BotDeps): Bot {
   };
 
   const showSupport = async (ctx: any): Promise<void> => {
-    const username = deps.adminUsername?.replace(/^@/, "");
-    if (!username) {
+    const username = deps.adminUsername?.replace(/^@/, "") ?? "";
+
+    let adminId: number | null = null;
+    for (const id of deps.adminUserIds) {
+      const parsed = Number.parseInt(String(id), 10);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        adminId = parsed;
+        break;
+      }
+    }
+
+    if (!adminId && !username) {
       await replyOrEdit(ctx, "Поддержка пока не настроена. Но мы рядом.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
 
-    const url = `https://t.me/${encodeURIComponent(username)}`;
-    const text = [`Напиши нам сюда 👇`, url].join("\n");
+    const contact =
+      adminId !== null
+        ? `<a href="tg://user?id=${adminId}">Поддержка LisVPN</a>`
+        : `@${escapeHtml(username)}`;
 
-    const kb = new InlineKeyboard().url("🆘 Открыть чат", url).row().text("🏠 Личный кабинет", "nav:cabinet");
-    await replyOrEdit(ctx, text, { reply_markup: kb });
+    const text = [
+      "Напишите нам, мы ответим как можно скорее 🙂",
+      "",
+      "Нажмите на контакт ниже, чтобы открыть чат:",
+      contact,
+    ].join("\n");
+
+    const kb = new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet");
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
   const requireUser = async (ctx: any): Promise<{ telegramId: string; user: any } | null> => {
@@ -355,6 +350,12 @@ export function buildBot(deps: BotDeps): Bot {
       "",
       active ? `✅ VPN работает до <b>${escapeHtml(expires)}</b>` : "🙈 Сейчас не активна",
       `📱 Устройства: <b>${escapeHtml(formatDevices(sub.deviceLimit))}</b>`,
+      "",
+      "🔥 <b>Основной сервер</b> — первый в списке (Эстония 🇪🇪).",
+      "Самый быстрый и стабильный: для Wi‑Fi, YouTube, Instagram, игр и обычного интернета.",
+      "",
+      "🌍 <b>Серверы «Обход №…»</b> — для мобильных сетей (LTE / 4G / 5G).",
+      "Используйте, если основной сервер не подключается. Скорость и стабильность могут быть ниже.",
     ]
       .filter(Boolean)
       .join("\n");

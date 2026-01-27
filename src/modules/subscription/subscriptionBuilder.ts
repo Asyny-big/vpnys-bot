@@ -19,7 +19,7 @@ const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
   "# =========================================",
 ];
 
-const PRIMARY_SERVER_DISPLAY_NAME = "🔥 LisVPN 🇪🇪 Estonia — FAST & STABLE";
+const PRIMARY_SERVER_DISPLAY_NAME = "🔥 LisVPN 🇪🇪 Эстония — Быстро и стабильно";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
@@ -161,7 +161,7 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
 
   const mobileUrls = (params.mobileBypassUrls ?? []).map((u) => u.trim()).filter(Boolean);
   for (let i = 0; i < mobileUrls.length; i++) {
-    lines.push(withUrlName(mobileUrls[i]!, `🌍 Mobile Bypass #${i + 1}`));
+    lines.push(withUrlName(mobileUrls[i]!, `🌍 Обход №${i + 1}`));
   }
 
   return { headers, body: `${lines.join("\n")}\n` };
