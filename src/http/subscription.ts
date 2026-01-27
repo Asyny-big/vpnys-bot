@@ -6,8 +6,6 @@ import type { SubscriptionService } from "../modules/subscription/subscriptionSe
 import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
 
-const ESTONIA_SERVER_NAME = "🇪🇪 Estonia • LisVPN";
-
 function hostnameFromUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   return url.hostname;
@@ -43,6 +41,7 @@ export async function registerSubscriptionRoutes(
     xui: ThreeXUiService;
     backendPublicUrl: string;
     telegramBotUrl: string;
+    mobileBypassUrls: ReadonlyArray<string>;
     xuiInboundId: number;
     xuiClientFlow?: string;
   }>,
@@ -827,7 +826,10 @@ export async function registerSubscriptionRoutes(
 
   app.get<{ Params: { token: string } }>("/sub/:token", async (req, reply) => {
     const replyExpired = async (prependText?: string): Promise<void> => {
-      const built = buildSubscription({ enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl }, []);
+      const built = buildSubscription(
+        { enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl },
+        { primaryServer: null, mobileBypassUrls: [] },
+      );
       for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
       const body = prependText?.trim().length ? `${prependText.trim()}\n\n${built.body}` : built.body;
       await reply.code(200).send(body);
@@ -870,33 +872,30 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      const servers = isActive
+      const primaryServer = isActive
         ? await (async () => {
             try {
               const template = await deps.xui.getVlessRealityTemplate(state.subscription.xuiInboundId);
-              return [
-                {
-                  name: ESTONIA_SERVER_NAME,
-                  host: hostnameFromUrl(deps.backendPublicUrl),
-                  uuid: state.subscription.xuiClientUuid,
-                  flow: deps.xuiClientFlow,
-                  template,
-                },
-                // Future: add Germany as a second server by pushing another object here.
-              ];
+              return {
+                name: "LisVPN",
+                host: hostnameFromUrl(deps.backendPublicUrl),
+                uuid: state.subscription.xuiClientUuid,
+                flow: deps.xuiClientFlow,
+                template,
+              };
             } catch (err) {
               req.log.error({ err }, "getVlessRealityTemplate failed for /sub/:token");
               await replyExpired("Техническая ошибка на сервере (шаблон Reality недоступен). Попробуйте позже.");
               return null;
             }
           })()
-        : [];
+        : null;
 
-      if (servers === null) return;
+      if (isActive && primaryServer === null) return;
 
       const built = buildSubscription(
         { enabled: state.enabled, expiresAt: effectiveExpiresAt, telegramBotUrl: deps.telegramBotUrl },
-        servers,
+        { primaryServer, mobileBypassUrls: deps.mobileBypassUrls },
       );
 
       for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);

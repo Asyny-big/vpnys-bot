@@ -3,6 +3,24 @@ import type { VlessRealityTemplate } from "../../integrations/threeXui/threeXuiS
 export const SUBSCRIPTION_TITLE = "🦊 ЛисVPN";
 export const SUBSCRIPTION_BRAND = "LisVPN";
 
+const PRIMARY_BLOCK: ReadonlyArray<string> = [
+  "# =========================================",
+  "# 🔥 LisVPN — основной сервер (рекомендуется)",
+  "# 🇪🇪 Эстония • высокая скорость • стабильный",
+  "# YouTube • Instagram • Игры",
+  "# =========================================",
+];
+
+const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
+  "# =========================================",
+  "# 🌍 Обход блокировок (мобильный интернет)",
+  "# LTE / 4G / 5G • Best-effort",
+  "# Используйте, если основной сервер недоступен",
+  "# =========================================",
+];
+
+const PRIMARY_SERVER_DISPLAY_NAME = "🔥 LisVPN 🇪🇪 Estonia — FAST & STABLE";
+
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
   enabled: boolean;
@@ -20,6 +38,11 @@ export type SubscriptionServer = Readonly<{
 export type BuiltSubscription = Readonly<{
   headers: Readonly<Record<string, string>>;
   body: string;
+}>;
+
+export type BuildSubscriptionParams = Readonly<{
+  primaryServer?: SubscriptionServer | null;
+  mobileBypassUrls?: ReadonlyArray<string>;
 }>;
 
 function unixSeconds(date?: Date | null): number {
@@ -62,13 +85,6 @@ function buildHeaders(params: { title: string; expireUnix: number }): Record<str
   };
 }
 
-function buildMeta(expiresAt?: Date | null): string[] {
-  return [
-    `# ${SUBSCRIPTION_BRAND}`,
-    `# upload=0; download=0; total=0; expire=${unixSeconds(expiresAt)}`,
-  ];
-}
-
 function buildExpiredText(botUrl: string): string {
   return [
     `❌ Подписка ${SUBSCRIPTION_BRAND} истекла.`,
@@ -109,7 +125,14 @@ function buildVlessUrl(server: SubscriptionServer): string {
   return `vless://${server.uuid}@${server.host}:${server.template.port}?${params.toString()}#${name}`;
 }
 
-export function buildSubscription(user: BuildSubscriptionUser, servers: ReadonlyArray<SubscriptionServer>): BuiltSubscription {
+function withUrlName(rawUrl: string, name: string): string {
+  const trimmed = rawUrl.trim();
+  const i = trimmed.indexOf("#");
+  const base = i === -1 ? trimmed : trimmed.slice(0, i);
+  return `${base}#${encodeURIComponent(name)}`;
+}
+
+export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubscriptionParams): BuiltSubscription {
   const nowMs = Date.now();
   const expiresMs = user.expiresAt ? user.expiresAt.getTime() : 0;
   const isExpired = !user.enabled || !user.expiresAt || expiresMs <= nowMs;
@@ -124,8 +147,22 @@ export function buildSubscription(user: BuildSubscriptionUser, servers: Readonly
     };
   }
 
+  if (!params.primaryServer) {
+    return {
+      headers,
+      body: "Техническая ошибка на сервере (не задан основной сервер).\n",
+    };
+  }
+
   const lines: string[] = [];
-  lines.push(...buildMeta(user.expiresAt));
-  for (const server of servers) lines.push(buildVlessUrl(server));
+  lines.push(...PRIMARY_BLOCK);
+  lines.push(buildVlessUrl({ ...params.primaryServer, name: PRIMARY_SERVER_DISPLAY_NAME }));
+  lines.push(...MOBILE_BYPASS_BLOCK);
+
+  const mobileUrls = (params.mobileBypassUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  for (let i = 0; i < mobileUrls.length; i++) {
+    lines.push(withUrlName(mobileUrls[i]!, `🌍 Mobile Bypass #${i + 1}`));
+  }
+
   return { headers, body: `${lines.join("\n")}\n` };
 }

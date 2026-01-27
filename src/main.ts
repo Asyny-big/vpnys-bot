@@ -1,6 +1,7 @@
 import { run } from "@grammyjs/runner";
 import Fastify from "fastify";
 import { loadEnv } from "./config/env";
+import { MOBILE_BYPASS_URLS } from "./config/mobileBypass";
 import { getPrisma } from "./db/prisma";
 import { ThreeXUiApiClient } from "./integrations/threeXui/threeXuiApiClient";
 import { ThreeXUiService } from "./integrations/threeXui/threeXuiService";
@@ -100,6 +101,7 @@ async function main(): Promise<void> {
       xui,
       backendPublicUrl: env.backendPublicUrl,
       telegramBotUrl: env.telegramBotUrl,
+      mobileBypassUrls: MOBILE_BYPASS_URLS,
       xuiInboundId: env.xuiInboundId,
       xuiClientFlow: env.xuiClientFlow,
     });
