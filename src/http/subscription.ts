@@ -180,7 +180,8 @@ export async function registerSubscriptionRoutes(
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
-      const statusLabel = isActive ? "Активна" : "Истекла";
+      const statusPillLabel = isActive ? "✅ Активна" : "⛔ Не активна";
+      const statusDetailLabel = isActive ? "Активна" : "Не активна";
       const trafficLabel = "Безлимит";
 
       const qr = qrSvg(baseSubUrl, { pixels: 256 });
@@ -188,7 +189,7 @@ export async function registerSubscriptionRoutes(
       const pageData = {
         token,
         subUrl: baseSubUrl,
-        platform: "windows" as const,
+        platform: "android" as const,
       };
 
       const html = `<!doctype html>
@@ -301,6 +302,26 @@ export async function registerSubscriptionRoutes(
       }
       .pill.good { color: rgba(67, 211, 123, 0.98); border-color: rgba(67, 211, 123, 0.22); background: rgba(67, 211, 123, 0.07); }
       .pill.bad { color: rgba(255, 91, 106, 0.98); border-color: rgba(255, 91, 106, 0.22); background: rgba(255, 91, 106, 0.06); }
+      .subDetails { margin-top: 10px; }
+      .subDetails summary { list-style: none; }
+      .subDetails summary::-webkit-details-marker { display:none; }
+      .subDetails summary::marker { content: ""; }
+      .subSummaryWrap { display:flex; justify-content:flex-end; }
+      .subSummary {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        appearance:none;
+        cursor:pointer;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255,255,255,0.06);
+        color: var(--text);
+        font-weight: 850;
+        padding: 8px 12px;
+        user-select: none;
+      }
+      .subSummary:active { transform: translateY(1px); }
       .grid {
         display:grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -564,55 +585,55 @@ export async function registerSubscriptionRoutes(
         <div class="subHead">
           <div class="subTitle">
             <span>Подписка</span>
-            <span class="pill ${isActive ? "good" : "bad"}">${escapeHtml(statusLabel)}</span>
-          </div>
-          <span class="pill">${escapeHtml(userLabel)}</span>
-        </div>
-        <div class="grid">
-          <div class="item">
-            <div class="ic">👤</div>
-            <div class="txt">
-              <div class="k">Имя пользователя</div>
-              <div class="v">${escapeHtml(userLabel)}</div>
-            </div>
-          </div>
-          <div class="item">
-            <div class="ic">${isActive ? "✅" : "⏳"}</div>
-            <div class="txt">
-              <div class="k">Статус</div>
-              <div class="v">${escapeHtml(statusLabel)}</div>
-            </div>
-          </div>
-          <div class="item">
-            <div class="ic">📅</div>
-            <div class="txt">
-              <div class="k">Истекает</div>
-              <div class="v">${escapeHtml(expiresLabel)}</div>
-            </div>
-          </div>
-          <div class="item">
-            <div class="ic">📶</div>
-            <div class="txt">
-              <div class="k">Трафик</div>
-              <div class="v">${escapeHtml(trafficLabel)}</div>
-            </div>
+            <span class="pill ${isActive ? "good" : "bad"}">${escapeHtml(statusPillLabel)}</span>
           </div>
         </div>
+
+        <details class="subDetails" id="subDetails">
+          <summary class="subSummaryWrap"><span class="subSummary" id="subSummary">Показать детали</span></summary>
+          <div class="grid" style="margin-top:10px">
+            <div class="item">
+              <div class="ic">👤</div>
+              <div class="txt">
+                <div class="k">Имя пользователя</div>
+                <div class="v">${escapeHtml(userLabel)}</div>
+              </div>
+            </div>
+            <div class="item">
+              <div class="ic">${isActive ? "🟢" : "⚪️"}</div>
+              <div class="txt">
+                <div class="k">Статус</div>
+                <div class="v">${escapeHtml(statusDetailLabel)}</div>
+              </div>
+            </div>
+            <div class="item">
+              <div class="ic">📅</div>
+              <div class="txt">
+                <div class="k">Дата окончания</div>
+                <div class="v">${escapeHtml(expiresLabel)}</div>
+              </div>
+            </div>
+            <div class="item">
+              <div class="ic">📊</div>
+              <div class="txt">
+                <div class="k">Трафик</div>
+                <div class="v">${escapeHtml(trafficLabel)}</div>
+              </div>
+            </div>
+          </div>
+        </details>
       </div>
 
       <div class="sectionTitle">Выберите платформу</div>
       <div class="platforms" role="tablist" aria-label="Платформа">
-        <button class="tab" role="tab" data-platform="windows" aria-selected="true" type="button">Windows</button>
-        <button class="tab" role="tab" data-platform="android" aria-selected="false" type="button">Android</button>
+        <button class="tab" role="tab" data-platform="android" aria-selected="true" type="button">Android / Windows</button>
         <button class="tab" role="tab" data-platform="ios" aria-selected="false" type="button">iOS</button>
-        <button class="tab" role="tab" data-platform="macos" aria-selected="false" type="button">macOS</button>
       </div>
 
       <div class="appSelect" aria-label="Выбор приложения">
-        <div class="label">Выберите приложение</div>
+        <div class="label">Приложение</div>
         <div class="selectWrap">
           <select class="select" id="appSelect" aria-label="Выберите приложение">
-            <option value="" selected disabled>Выберите приложение</option>
           </select>
           <div class="appHint" id="appHint">Выберите платформу, затем приложение — и добавьте подписку в один клик.</div>
         </div>
@@ -626,7 +647,10 @@ export async function registerSubscriptionRoutes(
           <a class="primary" id="primaryBtn" href="#" role="button" aria-disabled="true">📲 Добавить подписку</a>
         </div>
 
-        <div class="small">Если приложение не открылось — установите его и повторите, либо добавьте подписку вручную.</div>
+        <div class="small">
+          Рекомендуется добавлять подписку по Wi‑Fi. На мобильном интернете с ограничениями добавление и обновление могут не работать.<br />
+          Первый сервер — основной и самый стабильный. «Обход №…» используйте только если основной не подключается.
+        </div>
         <div class="row">
           <button class="secondary" id="showLinkBtn" type="button">Показать ссылку</button>
         </div>
@@ -661,25 +685,13 @@ export async function registerSubscriptionRoutes(
         data.appId = '';
 
         const appCatalog = {
-          windows: [
-            { id: 'clashverge', label: 'Clash Verge', deeplink: (url) => 'clash://install-config?url=' + encodeURIComponent(url) },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
-          ],
           android: [
-            { id: 'v2rayng', label: 'V2RayNG', deeplink: (url) => 'v2rayng://install-config?url=' + encodeURIComponent(url) },
-            { id: 'singbox', label: 'Sing-box', deeplink: (url) => 'sing-box://import?url=' + encodeURIComponent(url) },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
-            { id: 'v2raytun', label: 'v2rayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
             // Happ (как на скриншоте): "happ://add/<subscriptionUrl>" без query-параметра.
             { id: 'happ', label: 'Happ', deeplink: (url) => 'happ://add/' + url },
+            { id: 'v2raytun', label: 'v2RayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
           ],
           ios: [
-            { id: 'shadowrocket', label: 'Shadowrocket', deeplink: (url) => 'shadowrocket://add/sub?url=' + encodeURIComponent(url) },
-            { id: 'singbox', label: 'Sing-box', deeplink: (url) => 'sing-box://import?url=' + encodeURIComponent(url) },
-          ],
-          macos: [
-            { id: 'clashverge', label: 'Clash Verge', deeplink: (url) => 'clash://install-config?url=' + encodeURIComponent(url) },
-            { id: 'hiddify', label: 'Hiddify', deeplink: (url) => 'hiddify://import/' + encodeURIComponent(url) },
+            { id: 'v2raytun', label: 'v2RayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
           ],
         };
 
@@ -725,18 +737,29 @@ export async function registerSubscriptionRoutes(
         function renderAppSelect(platform) {
           const apps = appsForPlatform(platform);
           const hasSelected = apps.some((a) => a.id === data.appId);
-          if (!hasSelected) data.appId = '';
+          if (!hasSelected) data.appId = apps[0]?.id || '';
 
-          appSelect.innerHTML = ['<option value=\"\" ' + (data.appId ? '' : 'selected') + ' disabled>Выберите приложение</option>']
-            .concat(apps.map((a) => '<option value=\"' + a.id + '\" ' + (a.id === data.appId ? 'selected' : '') + '>' + a.label + '</option>'))
+          appSelect.innerHTML = apps
+            .map((a) => '<option value=\"' + a.id + '\" ' + (a.id === data.appId ? 'selected' : '') + '>' + a.label + '</option>')
             .join('');
 
           appSelect.disabled = apps.length === 0;
-          if (apps.length === 0) {
-            appHint.textContent = 'Для этой платформы пока нет поддерживаемых приложений.';
-          } else {
-            appHint.textContent = 'После выбора приложения кнопка станет активной.';
+          renderAppHint();
+        }
+
+        function renderAppHint() {
+          const app = selectedApp();
+          if (!app) {
+            appHint.textContent = 'Выберите приложение для добавления подписки.';
+            return;
           }
+
+          if (app.id === 'happ') {
+            appHint.textContent = 'Happ — рекомендуется (по умолчанию). Простой и удобный. Поддерживает подписку и автоматическое обновление серверов.';
+            return;
+          }
+
+          appHint.textContent = 'v2RayTun — альтернатива. Используйте, если Happ не подходит или не работает.';
         }
 
         function updatePrimary() {
@@ -752,8 +775,8 @@ export async function registerSubscriptionRoutes(
           const appName = app ? app.label : 'приложение';
           const steps = [
             { t: 'Скачать приложение', d: app ? appName : 'Выберите приложение ниже' },
-            { t: 'Импортировать подписку', d: 'Нажмите «Добавить подписку» ниже' },
-            { t: 'Подключиться', d: platform === 'android' ? 'Включите VPN в приложении' : 'Выберите сервер и включите VPN' },
+            { t: 'Добавить подписку', d: app ? ('Нажмите «Добавить в ' + appName + '» ниже') : 'Нажмите кнопку ниже' },
+            { t: 'Включить VPN', d: 'Включите VPN в приложении' },
           ];
           stepsEl.innerHTML = steps.map((s, i) => (
             '<li class=\"step\">' +
@@ -775,11 +798,21 @@ export async function registerSubscriptionRoutes(
 
         appSelect.addEventListener('change', () => {
           data.appId = String(appSelect.value || '');
+          renderAppHint();
           renderSteps(data.platform);
           updatePrimary();
         });
 
-        setPlatform('windows');
+        setPlatform('android');
+
+        const subDetails = document.getElementById('subDetails');
+        const subSummary = document.getElementById('subSummary');
+        if (subDetails) {
+          subDetails.addEventListener('toggle', () => {
+            const isOpen = subDetails.getAttribute('open') !== null;
+            if (subSummary) subSummary.textContent = isOpen ? 'Скрыть детали' : 'Показать детали';
+          });
+        }
 
         document.getElementById('copySubBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
 

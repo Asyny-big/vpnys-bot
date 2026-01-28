@@ -45,7 +45,31 @@ export enum CheckoutFlow {
   PROMO = "promo",
 }
 
+function resolveAdminId(deps: BotDeps): number | null {
+  for (const id of deps.adminUserIds) {
+    const parsed = Number.parseInt(String(id), 10);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return null;
+}
+
+function resolveSupportUsername(deps: BotDeps): string {
+  return (deps.adminUsername?.replace(/^@/, "") ?? "").trim();
+}
+
+function resolveSupportUrl(deps: BotDeps): string | null {
+  const username = resolveSupportUsername(deps);
+  if (username.length) return `https://t.me/${encodeURIComponent(username)}`;
+
+  const adminId = resolveAdminId(deps);
+  if (adminId !== null) return `tg://user?id=${adminId}`;
+
+  return null;
+}
+
 function supportButton(deps: BotDeps, label = "🆘 Поддержка"): InlineKeyboardButton {
+  const url = resolveSupportUrl(deps);
+  if (url) return { text: label, url };
   return { text: label, callback_data: "nav:support" };
 }
 
@@ -71,9 +95,9 @@ function cabinetKeyboard(deps: BotDeps): InlineKeyboard {
     .text("💳 Оформить подписку", "nav:buy")
     .row()
     .text("📱 Устройства", "nav:devices")
-    .text("🧾 Инструкция", "nav:guide")
+    .text("📄 Инструкция", "nav:guide")
     .row()
-    .text("🆘 Написать в поддержку", "nav:support");
+    .add(supportButton(deps, "🆘 Написать в поддержку"));
 
   return kb;
 }
@@ -180,35 +204,27 @@ export function buildBot(deps: BotDeps): Bot {
   };
 
   const showSupport = async (ctx: any): Promise<void> => {
-    const username = deps.adminUsername?.replace(/^@/, "") ?? "";
+    const supportUrl = resolveSupportUrl(deps);
+    const username = resolveSupportUsername(deps);
 
-    let adminId: number | null = null;
-    for (const id of deps.adminUserIds) {
-      const parsed = Number.parseInt(String(id), 10);
-      if (Number.isFinite(parsed) && parsed > 0) {
-        adminId = parsed;
-        break;
-      }
-    }
-
-    if (!adminId && !username) {
+    if (!supportUrl && !username.length) {
       await replyOrEdit(ctx, "Поддержка пока не настроена. Но мы рядом.", { reply_markup: backToCabinetKeyboard(deps) });
       return;
     }
 
-    const contact =
-      adminId !== null
-        ? `<a href="tg://user?id=${adminId}">Поддержка LisVPN</a>`
-        : `@${escapeHtml(username)}`;
-
     const text = [
-      "Напишите нам, мы ответим как можно скорее 🙂",
+      "🆘 <b>Поддержка LisVPN</b>",
       "",
-      "Нажмите на контакт ниже, чтобы открыть чат:",
-      contact,
-    ].join("\n");
+      "Если есть вопрос или что-то не получается — напишите нам, мы поможем.",
+      username.length ? `Контакт: @${escapeHtml(username)}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
 
-    const kb = new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet");
+    const kb = new InlineKeyboard();
+    if (supportUrl) kb.url("🆘 Открыть чат поддержки", supportUrl).row();
+    kb.text("🏠 Личный кабинет", "nav:cabinet");
+
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
@@ -584,48 +600,30 @@ export function buildBot(deps: BotDeps): Bot {
     }
   };
 
-  const showGuideMenu = async (ctx: any): Promise<void> => {
-    const kb = new InlineKeyboard()
-      .text("Android", "guide:android")
-      .text("iPhone", "guide:ios")
-      .row()
-      .text("Windows и Mac", "guide:desktop")
-      .row()
-      .text("🏠 Личный кабинет", "nav:cabinet")
-      .row()
-      .add(supportButton(deps));
+  const showGuide = async (ctx: any): Promise<void> => {
+    const text = [
+      "📄 <b>Как пользоваться LisVPN</b>",
+      "",
+      "1) Нажми «🚀 Подключить VPN» в боте.",
+      "2) На странице подписки выбери <b>Happ</b> (или другое приложение) и нажми «Добавить подписку».",
+      "3) В приложении включи VPN.",
+      "",
+      "✅ <b>Какой сервер выбирать</b>",
+      "🔥 <b>Эстония 🇪🇪 (первый в списке)</b> — основной: обычно самый быстрый и стабильный (Wi‑Fi, YouTube, Instagram, игры, обычный интернет).",
+      "🌍 <b>«Обход №…»</b> — только для мобильных сетей (LTE / 4G / 5G). Используй, если основной сервер на мобильном интернете не подключается.",
+      "",
+      "📶 <b>Если в мобильной сети «белый список»</b>",
+      "Иногда оператор пропускает только отдельные сайты (например, Яндекс, VK, Госуслуги).",
+      "В таких сетях <b>подписка может не добавляться и не обновляться</b> — это ограничение сети, а не ошибка VPN.",
+      "Решение простое: добавляй/обновляй подписку по Wi‑Fi (или через раздачу), а на мобильном интернете переключайся на «Обход №…».",
+      "",
+      "🔄 <b>Когда обновлять подписку</b>",
+      "Обычно — редко: после переустановки приложения, на новом устройстве или если в приложении пропали серверы.",
+      "Если всё подключается и работает — <b>обновлять не нужно</b>.",
+    ].join("\n");
 
-    await replyOrEdit(ctx, "📄 Инструкция. Выбери устройство", { reply_markup: kb });
-  };
-
-  const showGuide = async (ctx: any, platform: "android" | "ios" | "desktop"): Promise<void> => {
-    const title = platform === "android" ? "Android" : platform === "ios" ? "iPhone" : "Windows и Mac";
-
-    const steps =
-      platform === "android"
-        ? [
-            "1. В боте нажми «🚀 Подключить VPN»",
-            "2. Откроется страница подписки",
-            "3. Выбери приложение (например, Hiddify) и открой подписку",
-            "4. Включи VPN",
-          ]
-        : platform === "ios"
-          ? [
-              "1. В боте нажми «🚀 Подключить VPN»",
-              "2. Откроется страница подписки",
-              "3. Выбери приложение (например, Hiddify) и открой подписку",
-              "4. Включи VPN",
-            ]
-          : [
-              "1. В боте нажми «🚀 Подключить VPN»",
-              "2. Откроется страница подписки",
-              "3. Выбери приложение и добавь подписку",
-              "4. Включи VPN",
-            ];
-
-    const text = [`📄 <b>Инструкция. ${escapeHtml(title)}</b>`, "", ...steps, "", "Если что-то не так, жми Поддержка."].join("\n");
-
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+    const kb = new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
   const showAbout = async (ctx: any): Promise<void> => {
@@ -995,7 +993,7 @@ export function buildBot(deps: BotDeps): Bot {
   });
   bot.callbackQuery("nav:guide", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showGuideMenu(ctx);
+    await showGuide(ctx);
   });
   bot.callbackQuery("nav:offer", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -1144,7 +1142,7 @@ export function buildBot(deps: BotDeps): Bot {
 
   bot.callbackQuery(/^guide:(android|ios|desktop)$/, async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showGuide(ctx, ctx.match[1] as any);
+    await showGuide(ctx);
   });
 
   bot.catch((err) => {
