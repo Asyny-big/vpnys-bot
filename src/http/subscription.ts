@@ -166,9 +166,9 @@ export async function registerSubscriptionRoutes(
       const state =
         needsExtend || tooOld
           ? await deps.subscriptions.syncFromXui(row.user).catch((err) => {
-              req.log.error({ err }, "syncFromXui failed for /connect/:token");
-              return { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
-            })
+            req.log.error({ err }, "syncFromXui failed for /connect/:token");
+            return { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
+          })
           : { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
 
       const effectiveExpiresAt =
@@ -180,666 +180,571 @@ export async function registerSubscriptionRoutes(
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
-      const statusPillLabel = isActive ? "✅ Активна" : "⛔ Не активна";
-      const statusDetailLabel = isActive ? "Активна" : "Не активна";
-      const trafficLabel = "Безлимит";
-
-      const qr = qrSvg(baseSubUrl, { pixels: 256 });
-
-      const pageData = {
-        token,
-        subUrl: baseSubUrl,
-        platform: "android" as const,
-      };
 
       const html = `<!doctype html>
 <html lang="ru">
-  <head>
+<head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
     <meta name="color-scheme" content="dark" />
-    <meta name="theme-color" content="#0b0f14" />
     <title>LisVPN — Подключение</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-      :root {
-        color-scheme: dark;
-        --bg: #0b0f14;
-        --panel: rgba(16, 22, 31, 0.72);
-        --panel2: rgba(16, 22, 31, 0.56);
-        --border: rgba(255,255,255,0.10);
-        --text: #e7edf4;
-        --muted: rgba(231,237,244,0.72);
-        --muted2: rgba(231,237,244,0.52);
-        --accent: #00d1ff;
-        --accent2: #ffaa00;
-        --good: #43d37b;
-        --bad: #ff5b6a;
-        --shadow: 0 22px 70px rgba(0,0,0,0.42);
-        --r-lg: 18px;
-        --r-md: 14px;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
-        background:
-          radial-gradient(1200px 800px at 20% -10%, rgba(0, 209, 255, 0.18), transparent 55%),
-          radial-gradient(900px 600px at 90% 0%, rgba(255, 170, 0, 0.12), transparent 45%),
-          radial-gradient(900px 600px at 30% 120%, rgba(67, 211, 123, 0.10), transparent 55%),
-          var(--bg);
-        color: var(--text);
-        overflow-x: hidden;
-      }
-      a { color: inherit; }
-      .wrap { max-width: 980px; margin: 0 auto; padding: 22px 16px 54px; }
-      .top {
-        display:flex; align-items:center; justify-content:space-between;
-        gap: 12px;
-        margin-bottom: 16px;
-      }
-      .brand {
-        display:flex; align-items:center; gap: 10px;
-        font-weight: 800; letter-spacing: 0.2px;
-      }
-      .logo {
-        width: 40px; height: 40px;
-        border-radius: 14px;
-        display:grid; place-items:center;
-        background: linear-gradient(135deg, rgba(255, 170, 0, 0.18), rgba(0, 209, 255, 0.12));
-        border: 1px solid var(--border);
-        box-shadow: 0 12px 30px rgba(0,0,0,0.35);
-      }
-      .actions { display:flex; gap: 10px; align-items:center; }
-      .iconBtn {
-        display:inline-flex; align-items:center; gap: 10px;
-        appearance:none; cursor:pointer;
-        border-radius: 14px;
-        padding: 10px 12px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        font-weight: 650;
-        transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
-      }
-      .iconBtn:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
-      .iconBtn:active { transform: translateY(1px); }
-      .icon {
-        width: 18px; height: 18px; display:inline-block;
-        opacity: 0.9;
-      }
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--border);
-        border-radius: var(--r-lg);
-        box-shadow: var(--shadow);
-        backdrop-filter: blur(10px);
-      }
-      .subCard { padding: 18px; margin-bottom: 16px; }
-      .subHead {
-        display:flex; align-items:center; justify-content:space-between;
-        gap: 12px;
-        margin-bottom: 14px;
-        min-width: 0;
-      }
-      .subTitle {
-        display:flex; align-items:center; gap: 10px;
-        font-size: 16px; font-weight: 800;
-        min-width: 0;
-      }
-      .pill {
-        display:inline-flex; align-items:center; gap: 8px;
-        padding: 6px 10px;
-        border-radius: 999px;
-        font-weight: 750;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.05);
-        color: var(--muted);
-        white-space: nowrap;
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-      }
-      .pill.good { color: rgba(67, 211, 123, 0.98); border-color: rgba(67, 211, 123, 0.22); background: rgba(67, 211, 123, 0.07); }
-      .pill.bad { color: rgba(255, 91, 106, 0.98); border-color: rgba(255, 91, 106, 0.22); background: rgba(255, 91, 106, 0.06); }
-      .subDetails { margin-top: 10px; }
-      .subDetails summary { list-style: none; }
-      .subDetails summary::-webkit-details-marker { display:none; }
-      .subDetails summary::marker { content: ""; }
-      .subSummaryWrap { display:flex; justify-content:flex-end; }
-      .subSummary {
-        display:inline-flex;
-        align-items:center;
-        justify-content:center;
-        appearance:none;
-        cursor:pointer;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        font-weight: 850;
-        padding: 8px 12px;
-        user-select: none;
-      }
-      .subSummary:active { transform: translateY(1px); }
-      .grid {
-        display:grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
-      }
-      .item {
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(0,0,0,0.18);
-        border-radius: var(--r-md);
-        padding: 12px;
-        display:flex; gap: 10px; align-items:flex-start;
-        min-width: 0;
-        overflow: hidden;
-      }
-      .item .ic {
-        width: 34px; height: 34px; border-radius: 12px;
-        display:grid; place-items:center;
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(255,255,255,0.05);
-        flex: 0 0 auto;
-      }
-      .item .txt { min-width: 0; }
-      .item .k { color: var(--muted2); font-size: 12px; letter-spacing: 0.2px; }
-      .item .v { margin-top: 2px; font-size: 14px; font-weight: 750; }
-      .item .v { overflow-wrap: anywhere; word-break: break-all; }
-      .sectionTitle {
-        margin: 16px 4px 10px;
-        color: rgba(231,237,244,0.88);
-        font-size: 14px;
-        font-weight: 850;
-        letter-spacing: 0.3px;
-      }
-      .platforms {
-        display:flex; gap: 8px; flex-wrap: wrap;
-        padding: 12px;
-        background: var(--panel2);
-        border: 1px solid var(--border);
-        border-radius: var(--r-lg);
-      }
-      .appSelect {
-        margin-top: 10px;
-        padding: 12px;
-        background: var(--panel2);
-        border: 1px solid var(--border);
-        border-radius: var(--r-lg);
-        display:flex;
-        gap: 10px;
-        align-items:center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-      }
-      .appSelect .label {
-        color: rgba(231,237,244,0.88);
-        font-size: 13px;
-        font-weight: 850;
-        letter-spacing: 0.2px;
-      }
-      .selectWrap { flex: 1 1 320px; min-width: 240px; }
-      .select {
-        width: 100%;
-        appearance: none;
-        cursor: pointer;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(0,0,0,0.22);
-        color: var(--text);
-        font-weight: 850;
-        padding: 12px 14px;
-        line-height: 1.2;
-      }
-      .select:disabled { opacity: 0.6; cursor: not-allowed; }
-      .appHint { margin-top: 8px; color: var(--muted2); font-size: 12.5px; line-height: 1.45; }
-      .tab {
-        appearance:none; cursor:pointer;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        font-weight: 750;
-        padding: 10px 12px;
-        min-width: 104px;
-        text-align: center;
-        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
-      }
-      .tab:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.16); }
-      .tab:active { transform: translateY(1px); }
-      .tab[aria-selected="true"] {
-        border-color: rgba(0, 209, 255, 0.36);
-        background: linear-gradient(180deg, rgba(0, 209, 255, 0.14), rgba(0, 0, 0, 0.10));
-        box-shadow: 0 14px 40px rgba(0, 209, 255, 0.12);
-      }
-      .stepsCard { margin-top: 12px; padding: 16px; }
-      .steps { margin: 0; padding: 0; list-style: none; display:flex; flex-direction: column; gap: 10px; }
-      .step {
-        display:flex; gap: 12px; align-items:flex-start;
-        padding: 12px;
-        border-radius: var(--r-md);
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(0,0,0,0.16);
-      }
-      .num {
-        width: 28px; height: 28px;
-        border-radius: 10px;
-        display:grid; place-items:center;
-        background: rgba(0, 209, 255, 0.12);
-        border: 1px solid rgba(0, 209, 255, 0.22);
-        color: rgba(0, 209, 255, 0.98);
-        font-weight: 900;
-        flex: 0 0 auto;
-      }
-      .step .t { font-weight: 820; }
-      .step .d { margin-top: 2px; color: var(--muted); font-size: 13px; line-height: 1.45; }
-      .primaryWrap { margin-top: 14px; }
-      .primary {
-        width: 100%;
-        display: block;
-        appearance:none; cursor:pointer;
-        padding: 14px 14px;
-        border-radius: 16px;
-        border: 1px solid rgba(0, 209, 255, 0.32);
-        background: linear-gradient(135deg, rgba(0, 209, 255, 0.22), rgba(255, 170, 0, 0.14));
-        color: #f4fbff;
-        font-weight: 900;
-        font-size: 16px;
-        box-shadow: 0 20px 60px rgba(0, 209, 255, 0.10), 0 20px 60px rgba(255, 170, 0, 0.06);
-        transition: transform 120ms ease, filter 120ms ease;
-        text-decoration: none;
-        text-align: center;
-      }
-      .primary:active { transform: translateY(1px); }
-      .primary[aria-disabled="true"] {
-        opacity: 0.48;
-        cursor: not-allowed;
-        filter: saturate(0.85);
-        box-shadow: none;
-        border-color: rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        pointer-events: none;
-      }
-      .primary[aria-disabled="true"]:active { transform: none; }
-      .small {
-        margin-top: 12px;
-        color: var(--muted2);
-        font-size: 12.5px;
-        line-height: 1.55;
-      }
-      .row { display:flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-      .secondary {
-        appearance:none; cursor:pointer;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        font-weight: 800;
-        padding: 10px 12px;
-      }
-      .secondary:active { transform: translateY(1px); }
-      .manual {
-        margin-top: 10px;
-        display:none;
-        gap: 10px;
-        align-items:center;
-      }
-      .manual[aria-hidden="false"] { display:flex; }
-      .input {
-        flex: 1 1 auto;
-        padding: 11px 12px;
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.12);
-        background: rgba(0,0,0,0.22);
-        color: var(--text);
-        font-weight: 650;
-        min-width: 0;
-      }
-      .toast {
-        position: fixed;
-        left: 50%;
-        bottom: 18px;
-        transform: translateX(-50%);
-        background: rgba(16, 22, 31, 0.92);
-        border: 1px solid rgba(255,255,255,0.14);
-        color: var(--text);
-        border-radius: 14px;
-        padding: 10px 12px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.45);
-        max-width: min(520px, calc(100vw - 24px));
-        display:none;
-      }
-      .toast[aria-hidden="false"] { display:block; }
-      .toast .m { color: var(--muted); font-size: 13px; margin-top: 2px; }
-      .overlay {
-        position: fixed; inset: 0;
-        background: rgba(0,0,0,0.56);
-        display:none;
-        align-items: center;
-        justify-content: center;
-        padding: 18px;
-      }
-      .overlay[aria-hidden="false"] { display:flex; }
-      .modal {
-        width: min(420px, 100%);
-        background: rgba(16, 22, 31, 0.92);
-        border: 1px solid rgba(255,255,255,0.14);
-        border-radius: 18px;
-        box-shadow: 0 26px 90px rgba(0,0,0,0.55);
-        padding: 16px;
-      }
-      .modalHead { display:flex; align-items:center; justify-content:space-between; gap: 10px; margin-bottom: 10px; }
-      .modalTitle { font-weight: 900; }
-      .close {
-        appearance:none; cursor:pointer;
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.14);
-        background: rgba(255,255,255,0.06);
-        color: var(--text);
-        padding: 8px 10px;
-        font-weight: 900;
-      }
-      .qrBox {
-        display:grid;
-        place-items: center;
-        background: #ffffff;
-        border-radius: 16px;
-        padding: 14px;
-      }
-      .qrHint { margin-top: 10px; color: var(--muted); font-size: 13px; line-height: 1.5; text-align:center; }
-      @media (max-width: 640px) {
-        .wrap { padding-top: 16px; }
-        .iconBtn span { display:none; }
-        .iconBtn { padding: 10px; }
-        .grid { grid-template-columns: 1fr; }
-        .tab { min-width: 0; flex: 1 1 auto; }
-        .subHead { flex-wrap: wrap; }
-        .pill { max-width: 100%; }
-      }
-      @media (max-width: 480px) {
-        .selectWrap { flex-basis: 100%; min-width: 0; }
-      }
+        :root {
+            --bg-color: #0f1115;
+            --card-bg: rgba(23, 27, 34, 0.7);
+            --card-border: rgba(255, 255, 255, 0.08);
+            --primary: #0088cc;
+            --primary-glow: rgba(0, 136, 204, 0.3);
+            --accent: #22d3ee;
+            --accent-glow: rgba(34, 211, 238, 0.2);
+            --success: #34d399;
+            --text-main: #ffffff;
+            --text-muted: #9ca3af;
+            --font-main: 'Inter', system-ui, -apple-system, sans-serif;
+            --radius-L: 24px;
+            --radius-M: 16px;
+            --radius-S: 12px;
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 136, 204, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 90% 80%, rgba(34, 211, 238, 0.1) 0%, transparent 40%);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+        .logo {
+            width: 42px;
+            height: 42px;
+            background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-S);
+            display: grid;
+            place-items: center;
+            font-size: 24px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .brand-name {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-L);
+            padding: 24px;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+        }
+
+        .status-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .status-label {
+            font-size: 14px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            border-radius: 20px;
+            background: rgba(52, 211, 153, 0.15);
+            color: var(--success);
+            font-size: 13px;
+            font-weight: 600;
+            border: 1px solid rgba(52, 211, 153, 0.2);
+        }
+        .status-badge.inactive {
+             background: rgba(239, 68, 68, 0.15);
+             color: #ef4444;
+             border-color: rgba(239, 68, 68, 0.2);
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .info-key {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+        .info-value {
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: rgba(0,0,0,0.2);
+            padding: 4px;
+            border-radius: var(--radius-M);
+            border: 1px solid var(--card-border);
+            margin-bottom: 16px;
+        }
+        .tab-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            padding: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border-radius: var(--radius-S);
+            transition: all 0.2s ease;
+            font-family: inherit;
+        }
+        .tab-btn.active {
+            background: rgba(255,255,255,0.1);
+            color: var(--text-main);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            padding-left: 4px;
+        }
+        
+        .app-option {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius-M);
+            padding: 16px;
+            margin-bottom: 12px;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        .app-option:hover, .app-option.selected {
+            border-color: var(--accent);
+            background: rgba(34, 211, 238, 0.05);
+        }
+        .app-info {
+            display: flex;
+            flex-direction: column;
+        }
+        .app-name {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+        .app-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+        .radio-circle {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: 2px solid var(--card-border);
+            display: grid;
+            place-items: center;
+        }
+        .app-option.selected .radio-circle {
+            border-color: var(--accent);
+        }
+        .app-option.selected .radio-circle::after {
+            content: '';
+            width: 10px;
+            height: 10px;
+            background: var(--accent);
+            border-radius: 50%;
+        }
+
+        .step-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 24px;
+        }
+        .step {
+            display: flex;
+            gap: 16px;
+        }
+        .step-num {
+            width: 28px;
+            height: 28px;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            font-weight: 700;
+            font-size: 14px;
+            flex-shrink: 0;
+            color: var(--accent);
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-title {
+            font-weight: 600;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+        .step-desc {
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+        
+        .main-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            width: 100%;
+            background: linear-gradient(135deg, #0088cc 0%, #00aaff 100%);
+            color: white;
+            border: none;
+            padding: 16px;
+            border-radius: var(--radius-M);
+            font-size: 16px;
+            font-weight: 700;
+            cursor: pointer;
+            text-decoration: none;
+            box-shadow: 0 4px 20px rgba(0, 136, 204, 0.4);
+            transition: transform 0.1s;
+            margin-top: 8px;
+            font-family: inherit;
+        }
+        .main-btn:active {
+            transform: scale(0.98);
+        }
+
+        .secondary-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+        .sec-btn {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 12px;
+            border-radius: var(--radius-M);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-family: inherit;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #1f2937;
+            border: 1px solid var(--card-border);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 600;
+            opacity: 0;
+            pointer-events: none;
+            transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .toast.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .manual-box {
+            display: none;
+            background: rgba(0,0,0,0.3);
+            border-radius: var(--radius-S);
+            padding: 12px;
+            margin-top: 12px;
+            position: relative;
+        }
+        .manual-box.visible { display: block; }
+        .key-text {
+            word-break: break-all;
+            font-family: 'SF Mono', 'Roboto Mono', monospace;
+            font-size: 12px;
+            color: var(--text-muted);
+            max-height: 60px;
+            overflow-y: hidden;
+            mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
+        }
+
+        @media (min-width: 600px) {
+            .container { max-width: 600px; }
+            .card { padding: 32px; }
+        }
     </style>
-  </head>
-  <body>
-    <div class="wrap">
-      <div class="top">
-        <div class="brand">
-          <div class="logo">🦊</div>
-          <div>LisVPN</div>
-        </div>
-        <div class="actions">
-          <button class="iconBtn" id="copySubBtn" type="button" title="Скопировать ссылку подписки">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 9h10v10H9V9Z" stroke="currentColor" stroke-width="1.8"/><path d="M6 15H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8"/></svg>
-            <span>Скопировать ссылку</span>
-          </button>
-          <button class="iconBtn" id="qrBtn" type="button" title="Показать QR-код">
-            <svg class="icon" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 4h7v7H4V4Zm2 2v3h3V6H6Zm7-2h7v7h-7V4Zm2 2v3h3V6h-3ZM4 13h7v7H4v-7Zm2 2v3h3v-3H6Zm10 0h-3v-2h5v5h-2v-3Zm0 7v-2h2v2h-2Zm-3 0h-2v-5h2v5Zm7 0h-5v-2h3v-3h2v5Z" fill="currentColor"/></svg>
-            <span>QR-код</span>
-          </button>
-        </div>
-      </div>
+</head>
+<body>
 
-      <div class="card subCard">
-        <div class="subHead">
-          <div class="subTitle">
-            <span>Подписка</span>
-            <span class="pill ${isActive ? "good" : "bad"}">${escapeHtml(statusPillLabel)}</span>
-          </div>
-        </div>
-
-        <details class="subDetails" id="subDetails">
-          <summary class="subSummaryWrap"><span class="subSummary" id="subSummary">Показать детали</span></summary>
-          <div class="grid" style="margin-top:10px">
-            <div class="item">
-              <div class="ic">👤</div>
-              <div class="txt">
-                <div class="k">Имя пользователя</div>
-                <div class="v">${escapeHtml(userLabel)}</div>
-              </div>
-            </div>
-            <div class="item">
-              <div class="ic">${isActive ? "🟢" : "⚪️"}</div>
-              <div class="txt">
-                <div class="k">Статус</div>
-                <div class="v">${escapeHtml(statusDetailLabel)}</div>
-              </div>
-            </div>
-            <div class="item">
-              <div class="ic">📅</div>
-              <div class="txt">
-                <div class="k">Дата окончания</div>
-                <div class="v">${escapeHtml(expiresLabel)}</div>
-              </div>
-            </div>
-            <div class="item">
-              <div class="ic">📊</div>
-              <div class="txt">
-                <div class="k">Трафик</div>
-                <div class="v">${escapeHtml(trafficLabel)}</div>
-              </div>
-            </div>
-          </div>
-        </details>
-      </div>
-
-      <div class="sectionTitle">Выберите платформу</div>
-      <div class="platforms" role="tablist" aria-label="Платформа">
-        <button class="tab" role="tab" data-platform="android" aria-selected="true" type="button">Android / Windows</button>
-        <button class="tab" role="tab" data-platform="ios" aria-selected="false" type="button">iOS</button>
-      </div>
-
-      <div class="appSelect" aria-label="Выбор приложения">
-        <div class="label">Приложение</div>
-        <div class="selectWrap">
-          <select class="select" id="appSelect" aria-label="Выберите приложение">
-          </select>
-          <div class="appHint" id="appHint">Выберите платформу, затем приложение — и добавьте подписку в один клик.</div>
-        </div>
-      </div>
-
-      <div class="card stepsCard" aria-live="polite">
-        <div class="sectionTitle" style="margin-top:0">Инструкция</div>
-        <ul class="steps" id="steps"></ul>
-
-        <div class="primaryWrap">
-          <a class="primary" id="primaryBtn" href="#" role="button" aria-disabled="true">📲 Добавить подписку</a>
-        </div>
-
-        <div class="small">
-          Рекомендуется добавлять подписку по Wi‑Fi. На мобильном интернете с ограничениями добавление и обновление могут не работать.<br />
-          Первый сервер — основной и самый стабильный. «Обход №…» используйте только если основной не подключается.
-        </div>
-        <div class="row">
-          <button class="secondary" id="showLinkBtn" type="button">Показать ссылку</button>
-        </div>
-        <div class="manual" id="manual" aria-hidden="true">
-          <input class="input" id="manualInput" readonly value="${escapeHtml(baseSubUrl)}" />
-          <button class="secondary" id="manualCopyBtn" type="button">Скопировать</button>
-        </div>
-      </div>
+<div class="container">
+    <div class="header">
+        <div class="logo">🦊</div>
+        <div class="brand-name">LisVPN</div>
     </div>
 
-    <div class="toast" id="toast" aria-hidden="true">
-      <div id="toastTitle" style="font-weight:850">Подсказка</div>
-      <div class="m" id="toastMsg"></div>
-    </div>
-
-    <div class="overlay" id="qrOverlay" aria-hidden="true" role="dialog" aria-modal="true">
-      <div class="modal">
-        <div class="modalHead">
-          <div class="modalTitle">QR-код подписки</div>
-          <button class="close" id="qrClose" type="button" aria-label="Закрыть">✕</button>
+    <!-- Status Card -->
+    <div class="card">
+        <div class="status-header">
+            <span class="status-label">Статус подписки</span>
+            <div class="status-badge ${isActive ? '' : 'inactive'}">
+                <span>●</span> ${isActive ? 'Активна' : 'Не активна'}
+            </div>
         </div>
-        <div class="qrBox">${qr}</div>
-        <div class="qrHint">Откройте камеру на телефоне и отсканируйте QR-код, чтобы добавить подписку.</div>
-      </div>
+        <div class="info-grid">
+            <div class="info-item">
+                <span class="info-key">Пользователь</span>
+                <span class="info-value">${escapeHtml(userLabel)}</span>
+            </div>
+            <div class="info-item">
+                <span class="info-key">Истекает</span>
+                <span class="info-value">${escapeHtml(expiresLabel)}</span>
+            </div>
+        </div>
     </div>
 
-    <script>
-      (function () {
-        const data = ${safeJson(pageData)};
-        const subUrl = data.subUrl;
+    <div class="section-title">Настройка</div>
 
-        data.appId = '';
+    <!-- Platform Tabs -->
+    <div class="tabs">
+        <button class="tab-btn active" id="tab-android" onclick="switchPlatform('android')">Android / Windows</button>
+        <button class="tab-btn" id="tab-ios" onclick="switchPlatform('ios')">iOS / macOS</button>
+    </div>
 
-        const appCatalog = {
-          android: [
-            // Happ (как на скриншоте): "happ://add/<subscriptionUrl>" без query-параметра.
-            { id: 'happ', label: 'Happ', deeplink: (url) => 'happ://add/' + url },
-            { id: 'v2raytun', label: 'v2RayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
-          ],
-          ios: [
-            { id: 'v2raytun', label: 'v2RayTun', deeplink: (url) => 'v2raytun://import?url=' + encodeURIComponent(url) },
-          ],
-        };
+    <!-- App Selection Logic (Dynamic) -->
+    <div id="apps-container"></div>
 
-        const tabs = Array.from(document.querySelectorAll('.tab'));
-        const stepsEl = document.getElementById('steps');
-        const appSelect = document.getElementById('appSelect');
-        const appHint = document.getElementById('appHint');
-        const primaryBtn = document.getElementById('primaryBtn');
-        const toast = document.getElementById('toast');
-        const toastTitle = document.getElementById('toastTitle');
-        const toastMsg = document.getElementById('toastMsg');
-        const manual = document.getElementById('manual');
-        const manualInput = document.getElementById('manualInput');
+    <!-- Steps -->
+    <div class="card" style="padding: 20px;">
+        <div class="step-list" id="steps-container"></div>
+        
+        <div id="action-area" style="margin-top: 24px;">
+            <a href="#" class="main-btn" id="main-connect-btn">
+                <span style="font-size: 20px">⚡</span> Подключить
+            </a>
+        </div>
 
-        function showToast(title, msg) {
-          toastTitle.textContent = title;
-          toastMsg.textContent = msg;
-          toast.setAttribute('aria-hidden', 'false');
-          clearTimeout(showToast._t);
-          showToast._t = setTimeout(() => toast.setAttribute('aria-hidden', 'true'), 2600);
+        <div class="secondary-actions">
+            <button class="sec-btn" onclick="copyLink()">
+                <svg width="16" height="16" fill="none" class="icon"><path d="M5.5 11.5c-.88 0-1.63-.35-2.12-.92A2.96 2.96 0 0 1 2.5 8.5c0-.9.37-1.7 1-2.26.63-.56 1.5-.9 2.5-.9h3v1.5h-3c-1 0-1.5.8-1.5 1.66 0 .86.5 1.66 1.5 1.66h2v1.34h-2Zm5-7c.9 0 1.64.35 2.13.92.62.74.87 1.68.87 2.08 0 .9-.38 1.7-1 2.26-.63.56-1.5.9-2.5.9h-3V9.16h3c1 0 1.5-.8 1.5-1.66 0-.86-.5-1.66-1.5-1.66h-2V4.5h2Zm-5 4.34h8v-1.5h-8v1.5Z" fill="currentColor"/></svg>
+                Копировать
+            </button>
+            <button class="sec-btn" onclick="toggleManual()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                Ручная
+            </button>
+        </div>
+        
+        <div class="manual-box" id="manual-box">
+             <div class="key-text" id="manual-key">${escapeHtml(baseSubUrl)}</div>
+             <button class="sec-btn" onclick="copyLink()" style="width:100%; margin-top:8px;">Скопировать весь ключ</button>
+        </div>
+    </div>
+</div>
+
+<div class="toast" id="toast">
+    <span style="font-size: 18px">✅</span>
+    <span>Ссылка скопирована!</span>
+</div>
+
+<script>
+    // Constants
+    const SUB_URL = ${safeJson(baseSubUrl)}; 
+    
+    // State
+    let currentPlatform = 'android';
+    let currentApp = 'hiddify';
+
+    // Data
+    const APPS = {
+        android: [
+            { id: 'hiddify', name: 'Hiddify', desc: 'Рекомендуемое. Красивый и простой', link: 'hiddify://install-config?url=' },
+            { id: 'v2rayng', name: 'v2RayNG', desc: 'Классический клиент, надежный', link: 'v2rayng://install-config?url=' }
+        ],
+        ios: [
+            { id: 'streisand', name: 'Streisand', desc: 'Отличный дизайн, бесплатно', link: 'streisand://import/' },
+            { id: 'v2box', name: 'V2Box', desc: 'Популярный выбор', link: 'v2box://install-sub?url=' }
+        ]
+    };
+
+    const STEPS = {
+        hiddify: [
+            "Установите Hiddify из Google Play / AppStore",
+            "Нажмите кнопку «Подключить» ниже",
+            "В приложении нажмите большую кнопку Старт"
+        ],
+        v2rayng: [
+            "Скачайте v2RayNG",
+            "Скопируйте ключ подписки",
+            "В приложении нажмите + -> Импорт из буфера"
+        ],
+        streisand: [
+            "Скачайте Streisand",
+            "Нажмите «Подключить» ниже",
+            "Разрешите добавление конфигурации VPN"
+        ],
+        v2box: [
+            "Установите V2Box",
+            "Скопируйте ключ",
+            "Оно само все сделает"
+        ]
+    };
+
+    // Init
+    function init() {
+        // Detect OS simply
+        const ua = navigator.userAgent.toLowerCase();
+        if (ua.includes('iphone') || ua.includes('ipad') || ua.includes('macintosh')) {
+            currentPlatform = 'ios';
         }
+        
+        switchPlatform(currentPlatform);
+    }
 
-        async function copyText(text, okLabel) {
-          try {
-            await navigator.clipboard.writeText(text);
-            showToast('Скопировано', okLabel || 'Ссылка в буфере обмена');
-            return true;
-          } catch (e) {
-            try { prompt('Скопируйте ссылку:', text); } catch {}
-            return false;
-          }
+    function switchPlatform(p) {
+        currentPlatform = p;
+        // Update tabs
+        document.getElementById('tab-android').classList.toggle('active', p === 'android');
+        document.getElementById('tab-ios').classList.toggle('active', p === 'ios');
+        
+        // Default app for platform
+        currentApp = APPS[p][0].id;
+        
+        renderApps();
+        renderSteps();
+    }
+    
+    // expose to window for onclick
+    window.switchPlatform = switchPlatform;
+    
+    function selectApp(appId) {
+        currentApp = appId;
+        renderApps();
+        renderSteps();
+    }
+    window.selectApp = selectApp;
+
+    function renderApps() {
+        const container = document.getElementById('apps-container');
+        const list = APPS[currentPlatform];
+        
+        container.innerHTML = list.map(app => 
+            '<div class=\"app-option ' + (currentApp === app.id ? 'selected' : '') + '\" onclick=\"selectApp(\\'' + app.id + '\\')\">' +
+            '    <div class=\"app-info\">' +
+            '        <span class=\"app-name\">' + app.name + '</span>' +
+            '        <span class=\"app-desc\">' + app.desc + '</span>' +
+            '    </div>' +
+            '    <div class=\"radio-circle\"></div>' +
+            '</div>'
+        ).join('');
+    }
+
+    function renderSteps() {
+        const container = document.getElementById('steps-container');
+        const steps = STEPS[currentApp] || ["Скачать", "Подключить", "Радоваться"];
+        
+        container.innerHTML = steps.map((text, i) => 
+            '<div class=\"step\">' +
+            '    <div class=\"step-num\">' + (i + 1) + '</div>' +
+            '    <div class=\"step-content\">' +
+            '        <div class=\"step-title\">' + text + '</div>' +
+            '        <div class=\"step-desc\">Следуйте инструкции на экране.</div>' +
+            '    </div>' +
+            '</div>'
+        ).join('');
+
+        // Update button link
+        const currentAppData = APPS[currentPlatform].find(a => a.id === currentApp);
+        const link = currentAppData ? (currentAppData.link + SUB_URL) : '#';
+        const btn = document.getElementById('main-connect-btn');
+        btn.href = link;
+        
+         if (currentApp === 'v2raytun' || currentApp === 'streisand' || currentApp === 'v2box') {
+             btn.href = currentAppData.link + encodeURIComponent(SUB_URL);
+        } else {
+             btn.href = currentAppData.link + SUB_URL;
         }
+    }
 
-        function appsForPlatform(platform) {
-          return appCatalog[platform] || [];
-        }
-
-        function selectedApp() {
-          const apps = appsForPlatform(data.platform);
-          return apps.find((a) => a.id === data.appId) || null;
-        }
-
-        function renderAppSelect(platform) {
-          const apps = appsForPlatform(platform);
-          const hasSelected = apps.some((a) => a.id === data.appId);
-          if (!hasSelected) data.appId = apps[0]?.id || '';
-
-          appSelect.innerHTML = apps
-            .map((a) => '<option value=\"' + a.id + '\" ' + (a.id === data.appId ? 'selected' : '') + '>' + a.label + '</option>')
-            .join('');
-
-          appSelect.disabled = apps.length === 0;
-          renderAppHint();
-        }
-
-        function renderAppHint() {
-          const app = selectedApp();
-          if (!app) {
-            appHint.textContent = 'Выберите приложение для добавления подписки.';
-            return;
-          }
-
-          if (app.id === 'happ') {
-            appHint.textContent = 'Happ — рекомендуется (по умолчанию). Простой и удобный. Поддерживает подписку и автоматическое обновление серверов.';
-            return;
-          }
-
-          appHint.textContent = 'v2RayTun — альтернатива. Используйте, если Happ не подходит или не работает.';
-        }
-
-        function updatePrimary() {
-          const app = selectedApp();
-          const enabled = !!app;
-          primaryBtn.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-          primaryBtn.textContent = app ? ('📲 Добавить в ' + app.label) : '📲 Добавить подписку';
-          primaryBtn.href = enabled ? app.deeplink(subUrl) : '#';
-        }
-
-        function renderSteps(platform) {
-          const app = selectedApp();
-          const appName = app ? app.label : 'приложение';
-          const steps = [
-            { t: 'Скачать приложение', d: app ? appName : 'Выберите приложение ниже' },
-            { t: 'Добавить подписку', d: app ? ('Нажмите «Добавить в ' + appName + '» ниже') : 'Нажмите кнопку ниже' },
-            { t: 'Включить VPN', d: 'Включите VPN в приложении' },
-          ];
-          stepsEl.innerHTML = steps.map((s, i) => (
-            '<li class=\"step\">' +
-              '<div class=\"num\">' + (i + 1) + '</div>' +
-              '<div><div class=\"t\">' + s.t + '</div><div class=\"d\">' + s.d + '</div></div>' +
-            '</li>'
-          )).join('');
-        }
-
-        function setPlatform(next) {
-          data.platform = next;
-          tabs.forEach((t) => t.setAttribute('aria-selected', String(t.dataset.platform === next)));
-          renderAppSelect(next);
-          renderSteps(next);
-          updatePrimary();
-        }
-
-        tabs.forEach((t) => t.addEventListener('click', () => setPlatform(t.dataset.platform)));
-
-        appSelect.addEventListener('change', () => {
-          data.appId = String(appSelect.value || '');
-          renderAppHint();
-          renderSteps(data.platform);
-          updatePrimary();
+    function copyLink() {
+        navigator.clipboard.writeText(SUB_URL).then(() => {
+            const t = document.getElementById('toast');
+            t.classList.add('visible');
+            setTimeout(() => t.classList.remove('visible'), 2000);
         });
+    }
+    window.copyLink = copyLink;
 
-        setPlatform('android');
+    function toggleManual() {
+        document.getElementById('manual-box').classList.toggle('visible');
+    }
+    window.toggleManual = toggleManual;
 
-        const subDetails = document.getElementById('subDetails');
-        const subSummary = document.getElementById('subSummary');
-        if (subDetails) {
-          subDetails.addEventListener('toggle', () => {
-            const isOpen = subDetails.getAttribute('open') !== null;
-            if (subSummary) subSummary.textContent = isOpen ? 'Скрыть детали' : 'Показать детали';
-          });
-        }
+    // Run
+    init();
 
-        document.getElementById('copySubBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
-
-        const qrOverlay = document.getElementById('qrOverlay');
-        const qrClose = document.getElementById('qrClose');
-        function closeQr() { qrOverlay.setAttribute('aria-hidden', 'true'); }
-        document.getElementById('qrBtn')?.addEventListener('click', () => qrOverlay.setAttribute('aria-hidden', 'false'));
-        qrClose?.addEventListener('click', closeQr);
-        qrOverlay?.addEventListener('click', (e) => { if (e.target === qrOverlay) closeQr(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQr(); });
-
-        document.getElementById('showLinkBtn')?.addEventListener('click', () => {
-          const isHidden = manual.getAttribute('aria-hidden') !== 'false';
-          manual.setAttribute('aria-hidden', isHidden ? 'false' : 'true');
-          if (isHidden) manualInput?.select?.();
-        });
-        document.getElementById('manualCopyBtn')?.addEventListener('click', () => copyText(subUrl, 'Ссылка подписки скопирована'));
-
-        primaryBtn?.addEventListener('click', (e) => {
-          if (primaryBtn.getAttribute('aria-disabled') === 'true') {
-            e.preventDefault();
-            showToast('Выберите приложение', 'Сначала выберите приложение для импорта подписки.');
-          }
-        });
-      })();
-    </script>
-  </body>
+</script>
+</body>
 </html>`;
 
       return await reply
@@ -893,9 +798,9 @@ export async function registerSubscriptionRoutes(
       const state =
         needsExtend || tooOld
           ? await deps.subscriptions.syncFromXui(row.user).catch((err) => {
-              req.log.error({ err }, "syncFromXui failed for /sub/:token");
-              return { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
-            })
+            req.log.error({ err }, "syncFromXui failed for /sub/:token");
+            return { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
+          })
           : { subscription: row, expiresAt: row.expiresAt ?? undefined, enabled: row.enabled };
 
       const effectiveExpiresAt =
@@ -907,21 +812,21 @@ export async function registerSubscriptionRoutes(
 
       const primaryServer = isActive
         ? await (async () => {
-            try {
-              const template = await deps.xui.getVlessRealityTemplate(state.subscription.xuiInboundId);
-              return {
-                name: "LisVPN",
-                host: hostnameFromUrl(deps.backendPublicUrl),
-                uuid: state.subscription.xuiClientUuid,
-                flow: deps.xuiClientFlow,
-                template,
-              };
-            } catch (err) {
-              req.log.error({ err }, "getVlessRealityTemplate failed for /sub/:token");
-              await replyExpired("Техническая ошибка на сервере (шаблон Reality недоступен). Попробуйте позже.");
-              return null;
-            }
-          })()
+          try {
+            const template = await deps.xui.getVlessRealityTemplate(state.subscription.xuiInboundId);
+            return {
+              name: "LisVPN",
+              host: hostnameFromUrl(deps.backendPublicUrl),
+              uuid: state.subscription.xuiClientUuid,
+              flow: deps.xuiClientFlow,
+              template,
+            };
+          } catch (err) {
+            req.log.error({ err }, "getVlessRealityTemplate failed for /sub/:token");
+            await replyExpired("Техническая ошибка на сервере (шаблон Reality недоступен). Попробуйте позже.");
+            return null;
+          }
+        })()
         : null;
 
       if (isActive && primaryServer === null) return;
