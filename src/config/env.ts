@@ -204,7 +204,7 @@ export function loadEnv(): Env {
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     telegramBotUrl: ensureUrl("TELEGRAM_BOT_URL", required("TELEGRAM_BOT_URL")),
     adminUsername: optional("ADMIN_USERNAME"),
-    adminUserIds: parseIdSet(optional("ADMIN_USER_IDS")),
+    adminUserIds: parseIdSet(optional("ADMIN_USER_IDS") ?? optional("ADMIN_IDS")),
 
     backendPublicUrl,
 

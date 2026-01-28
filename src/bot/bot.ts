@@ -18,6 +18,7 @@ import type { ReferralService } from "../modules/referral/referralService";
 import type { BanService } from "../modules/ban/banService";
 import type { AdminUserDeletionService } from "../modules/admin/userDeletionService";
 import type { AdminUserBanService } from "../modules/admin/userBanService";
+import { registerBroadcast } from "./broadcast";
 
 export type BotDeps = Readonly<{
   botToken: string;
@@ -115,6 +116,8 @@ export function buildBot(deps: BotDeps): Bot {
     if (!telegramId) return false;
     return deps.adminUserIds.has(String(telegramId));
   };
+
+  registerBroadcast(bot, deps.prisma, isAdmin);
 
   const ensureNotBlocked = async (ctx: any, telegramId: string): Promise<boolean> => {
     try {
