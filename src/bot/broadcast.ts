@@ -57,7 +57,7 @@ async function listRecipientTelegramIds(prisma: PrismaClient): Promise<readonly 
 function extractRetryAfterSeconds(err: unknown): number | null {
   if (err && typeof err === "object") {
     const anyErr = err as any;
-    const retry = anyErr?.error?.parameters?.retry_after ?? anyErr?.parameters?.retry_after;
+    const retry = anyErr?.parameters?.retry_after ?? anyErr?.error?.parameters?.retry_after;
     if (typeof retry === "number" && Number.isFinite(retry) && retry > 0) return retry;
   }
   return null;
@@ -65,9 +65,13 @@ function extractRetryAfterSeconds(err: unknown): number | null {
 
 function errorSummary(err: unknown): string {
   if (err instanceof GrammyError) {
-    const code = err.error?.error_code;
-    const desc = err.error?.description;
-    return `GrammyError ${code ?? "?"}: ${desc ?? "unknown"}`;
+    return `GrammyError ${err.error_code}: ${err.description}`;
+  }
+  if (err && typeof err === "object" && "error" in err) {
+    const inner = (err as any).error;
+    if (inner instanceof GrammyError) return `GrammyError ${inner.error_code}: ${inner.description}`;
+    if (inner instanceof HttpError) return `HttpError: ${inner.message}`;
+    if (inner instanceof Error) return `${inner.name}: ${inner.message}`;
   }
   if (err instanceof HttpError) return `HttpError: ${err.message}`;
   if (err instanceof Error) return `${err.name}: ${err.message}`;
