@@ -618,6 +618,7 @@ export async function registerSubscriptionRoutes(
     // Data
     const APPS = {
         android: [
+            { id: 'happ', name: 'Happ', desc: 'Простой и удобный клиент', link: 'happ://add/' },
             { id: 'hiddify', name: 'Hiddify', desc: 'Рекомендуемое. Красивый и простой', link: 'hiddify://install-config?url=' },
             { id: 'v2rayng', name: 'v2RayNG', desc: 'Классический клиент, надежный', link: 'v2rayng://install-config?url=' }
         ],
@@ -628,6 +629,11 @@ export async function registerSubscriptionRoutes(
     };
 
     const STEPS = {
+        happ: [
+            "Установите Happ",
+            "Нажмите «Подключить» ниже",
+            "Приложение откроется и добавит подписку"
+        ],
         hiddify: [
             "Установите Hiddify из Google Play / AppStore",
             "Нажмите кнопку «Подключить» ниже",
