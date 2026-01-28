@@ -90,14 +90,13 @@ function buildHeaders(params: { title: string; expireUnix: number; telegramBotUr
     "Cache-Control": "no-store",
   };
 
-  // Add notice for expired subscriptions (Hiddify/Happ display this)
+  // Add announcement message for Happ/Hiddify (max 200 chars)
+  // Happ displays this as a banner/notice to users
   if (params.isExpired) {
     headers["Profile-Update-Interval"] = "1"; // Check every hour for renewal
-    // Some clients support this header for displaying messages
-    headers["Subscription-Notice"] = base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram →");
+    headers["announce"] = base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram для продления →");
   } else {
-    // Helpful tip for active subscriptions
-    headers["Subscription-Notice"] = base64Utf8("🦊 Если не работает — протестируйте все серверы и обновите подписку ↻");
+    headers["announce"] = base64Utf8("🦊 Если не работает — протестируйте все серверы и обновите подписку ↻");
   }
 
   return headers;
@@ -180,6 +179,11 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   }
 
   const lines: string[] = [];
+
+  // Tip message displayed in server list (appears as info line)
+  lines.push("# 🦊 Если не работает — протестируйте серверы ↻");
+  lines.push("");
+
   lines.push(...PRIMARY_BLOCK);
   lines.push(buildVlessUrl({ ...params.primaryServer, name: PRIMARY_SERVER_DISPLAY_NAME }));
   lines.push(...MOBILE_BYPASS_BLOCK);
