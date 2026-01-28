@@ -90,13 +90,13 @@ function buildHeaders(params: { title: string; expireUnix: number; telegramBotUr
     "Cache-Control": "no-store",
   };
 
-  // Add announcement message for Happ/Hiddify (max 200 chars, plain text)
+  // Add announcement message for Happ/Hiddify (max 200 chars)
   // Happ displays this as a banner/notice to users
   if (params.isExpired) {
     headers["Profile-Update-Interval"] = "1"; // Check every hour for renewal
-    headers["announce"] = "🚫 Подписка истекла! Оплатите в Telegram для продления →";
+    headers["announce"] = base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram для продления →");
   } else {
-    headers["announce"] = "🦊 Если не работает — протестируйте все серверы и обновите подписку ↻";
+    headers["announce"] = base64Utf8("🦊 Если не работает — протестируйте все серверы и обновите подписку ↻");
   }
 
   return headers;
