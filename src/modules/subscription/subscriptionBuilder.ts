@@ -62,7 +62,7 @@ function rfc5987Encode(value: string): string {
     .replace(/\*/g, "%2A");
 }
 
-function buildHeaders(params: { title: string; expireUnix: number }): Record<string, string> {
+function buildHeaders(params: { title: string; expireUnix: number; telegramBotUrl: string; isExpired?: boolean }): Record<string, string> {
   const title = params.title;
   const expireUnix = params.expireUnix;
 
@@ -73,7 +73,7 @@ function buildHeaders(params: { title: string; expireUnix: number }): Record<str
     `filename*=UTF-8''${rfc5987Encode(title)}`,
   ].join("; ");
 
-  return {
+  const headers: Record<string, string> = {
     "Content-Type": "text/plain; charset=utf-8",
     // Shadowrocket/Hiddify/sing-box: robust UTF-8 via base64.
     "Profile-Title": `base64:${base64Utf8(title)}`,
@@ -84,8 +84,23 @@ function buildHeaders(params: { title: string; expireUnix: number }): Record<str
     // Force clients to refresh subscription config every hour (value in hours).
     // This ensures expired subscriptions are detected quickly and bypass servers are removed.
     "Profile-Update-Interval": "1",
+    // Telegram bot button in Happ/Hiddify (paper plane icon)
+    "Support-URL": params.telegramBotUrl,
+    "Profile-Web-Page-URL": params.telegramBotUrl,
     "Cache-Control": "no-store",
   };
+
+  // Add notice for expired subscriptions (Hiddify/Happ display this)
+  if (params.isExpired) {
+    headers["Profile-Update-Interval"] = "1"; // Check every hour for renewal
+    // Some clients support this header for displaying messages
+    headers["Subscription-Notice"] = base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram →");
+  } else {
+    // Helpful tip for active subscriptions
+    headers["Subscription-Notice"] = base64Utf8("🦊 Если не работает — протестируйте все серверы и обновите подписку ↻");
+  }
+
+  return headers;
 }
 
 function buildExpiredText(botUrl: string): string {
@@ -141,11 +156,16 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   const isExpired = !user.enabled || !user.expiresAt || expiresMs <= nowMs;
 
   const expireUnix = unixSeconds(user.expiresAt);
-  const headers = buildHeaders({ title: SUBSCRIPTION_TITLE, expireUnix });
+  const headers = buildHeaders({
+    title: SUBSCRIPTION_TITLE,
+    expireUnix,
+    telegramBotUrl: user.telegramBotUrl,
+    isExpired,
+  });
 
   if (isExpired) {
     // Return empty body - clients will clear all servers without parse errors
-    // UX messages are sent via Telegram, NOT through subscription endpoint
+    // UX messages are sent via Telegram and shown via Support-URL button
     return {
       headers,
       body: "",
