@@ -81,6 +81,9 @@ function buildHeaders(params: { title: string; expireUnix: number }): Record<str
     "Content-Disposition": cd,
     // Many clients use this header to show "traffic bar" and expiration.
     "Subscription-Userinfo": `upload=0; download=0; total=0; expire=${expireUnix}`,
+    // Force clients to refresh subscription config every hour (value in hours).
+    // This ensures expired subscriptions are detected quickly and bypass servers are removed.
+    "Profile-Update-Interval": "1",
     "Cache-Control": "no-store",
   };
 }

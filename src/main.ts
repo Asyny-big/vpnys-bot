@@ -113,6 +113,8 @@ async function main(): Promise<void> {
     xui,
     intervalSeconds: env.workerIntervalSeconds,
     logger: app.log,
+    telegramBotToken: env.telegramBotToken,
+    telegramBotUrl: env.telegramBotUrl,
   });
   run(bot);
 }

@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
 import { SubscriptionStatus } from "../db/values";
+import { sendTelegramMessage } from "../utils/telegram";
 
 type Logger = Pick<Console, "info" | "warn" | "error">;
 
@@ -29,6 +30,8 @@ export function startSubscriptionWorker(deps: {
   xui: ThreeXUiService;
   intervalSeconds: number;
   logger?: Logger;
+  telegramBotToken?: string;
+  telegramBotUrl?: string;
 }): { stop: () => void } {
   const logger = deps.logger ?? console;
   let isRunning = false;
@@ -121,6 +124,9 @@ export function startSubscriptionWorker(deps: {
             const expired = !!effectiveExpiresAt && effectiveExpiresAt.getTime() <= now.getTime();
 
             if (expired) {
+              // Only send notification if subscription was previously enabled (first-time expiration)
+              const wasEnabled = enabled;
+
               if (enabled) {
                 await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
               }
@@ -133,6 +139,33 @@ export function startSubscriptionWorker(deps: {
                   lastSyncedAt: new Date(),
                 },
               });
+
+              // Send Telegram notification if this is first-time expiration
+              if (wasEnabled && deps.telegramBotToken && deps.telegramBotUrl) {
+                try {
+                  const user = await deps.prisma.user.findFirst({
+                    where: { subscription: { id: sub.id } },
+                    select: { telegramId: true },
+                  });
+                  if (user?.telegramId) {
+                    const message = [
+                      "⛔ Ваша подписка LisVPN закончилась.",
+                      "Доступ к VPN временно отключён.",
+                      "",
+                      "Для продолжения использования:",
+                      "• Оплатите подписку",
+                      "• Или введите промокод",
+                      "",
+                      `👉 ${deps.telegramBotUrl}`,
+                    ].join("\n");
+                    await sendTelegramMessage(deps.telegramBotToken, user.telegramId, message);
+                    logger.info(`worker: sent expiration notice to user tg:${user.telegramId}`);
+                  }
+                } catch (notifyErr: any) {
+                  logger.warn(`worker: failed to send expiration notice for sub=${sub.id}: ${notifyErr?.message ?? String(notifyErr)}`);
+                }
+              }
+
               return;
             }
 
