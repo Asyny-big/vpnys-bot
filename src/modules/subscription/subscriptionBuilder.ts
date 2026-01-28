@@ -144,11 +144,11 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   const headers = buildHeaders({ title: SUBSCRIPTION_TITLE, expireUnix });
 
   if (isExpired) {
-    // Return valid empty config - clients parse this without errors
+    // Return empty body - clients will clear all servers without parse errors
     // UX messages are sent via Telegram, NOT through subscription endpoint
     return {
       headers,
-      body: "# Subscription inactive\n",
+      body: "",
     };
   }
 
