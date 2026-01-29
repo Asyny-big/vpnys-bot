@@ -1,6 +1,6 @@
 import type { VlessRealityTemplate } from "../../integrations/threeXui/threeXuiService";
 
-export const SUBSCRIPTION_TITLE = "🦊 ЛисVPN";
+export const SUBSCRIPTION_TITLE = "🦊 ЛисVPN (v2)";
 export const SUBSCRIPTION_BRAND = "LisVPN";
 
 const PRIMARY_BLOCK: ReadonlyArray<string> = [
