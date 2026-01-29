@@ -1,7 +1,7 @@
 {
     "NL": {
         "name": "[OpenRay] 🇳🇱 NL-468",
-        "config": "vless://eb29727c-7324-4fbd-8138-88a5dd9a54a6@109.107.179.238:443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=store.steampowered.com&fp=chrome&security=reality&pbk=SdfbOs3NB8hkOxqfJNboieWIzEjb6tUtnsLICwqUCns&sid=918f2451a9a6f2e7#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-468",
+        "config": "vless://eb29727c-7324-4fbd-8138-88a5dd9a54a6@109.107.179.238:443?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=store.steampowered.com&fp=chrome&security=reality&pbk=SdfbOs3NB8hkOxqfJNboieWIzEjb6tUtnsLICwqUCns&sid=918f2451a9a6f2e7#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-468",
         "bandwidth": 47.83,
         "ttfb": 0.283023
     },
