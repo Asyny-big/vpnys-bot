@@ -26,7 +26,7 @@ const FAST_SERVERS_BLOCK: ReadonlyArray<string> = [
   "# =========================================",
 ];
 
-const PRIMARY_SERVER_DISPLAY_NAME = "🔥 LisVPN \uD83C\uDDEA\uD83C\uDDEA Эстония — Быстро и стабильно";
+const PRIMARY_SERVER_DISPLAY_NAME = "🚀 LisVPN — 🇪🇪 Эстония (PRO)";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
