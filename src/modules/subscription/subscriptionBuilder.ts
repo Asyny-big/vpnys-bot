@@ -21,7 +21,7 @@ const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
 
 
 
-const PRIMARY_SERVER_DISPLAY_NAME = "🚀 LisVPN — 🇪🇪 Эстония (PRO)";
+const PRIMARY_SERVER_DISPLAY_NAME = "🚀 LisVPN — EE Эстония (PRO)";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
