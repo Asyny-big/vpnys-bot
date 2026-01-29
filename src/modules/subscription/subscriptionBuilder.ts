@@ -19,12 +19,7 @@ const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
   "# =========================================",
 ];
 
-const FAST_SERVERS_BLOCK: ReadonlyArray<string> = [
-  "# =========================================",
-  "# ⚡ Быстрые серверы (YouTube, стриминг)",
-  "# Высокая скорость • Обычный интернет",
-  "# =========================================",
-];
+
 
 const PRIMARY_SERVER_DISPLAY_NAME = "🚀 LisVPN — 🇪🇪 Эстония (PRO)";
 
@@ -198,8 +193,13 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   // Быстрые серверы (если есть)
   const fastServers = params.fastServerUrls ?? [];
   if (fastServers.length > 0) {
-    lines.push(...FAST_SERVERS_BLOCK);
     for (const server of fastServers) {
+      lines.push("# =========================================");
+      // Clean name for header: "🇳🇱 Нидерланды (Fast)" -> "🇳🇱 Нидерланды"
+      const cleanName = server.displayName.replace(/ \(Fast\)$/, "");
+      lines.push(`# ⚡ ${cleanName} — Высокая скорость`);
+      lines.push("# 8K YouTube • Instagram • Netflix");
+      lines.push("# =========================================");
       lines.push(withUrlName(server.configUrl, server.displayName));
     }
   }
