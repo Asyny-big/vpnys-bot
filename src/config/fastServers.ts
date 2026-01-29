@@ -62,7 +62,7 @@ export function loadFastServers(jsonPath: string): ReadonlyArray<FastServerEntry
             if (!display) continue;
 
             entries.push({
-                displayName: `⚡ ${display.flag} ${display.name} — Быстрый`,
+                displayName: `${display.flag} ${display.name}`,
                 configUrl: result.config,
             });
         }
