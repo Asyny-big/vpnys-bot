@@ -1,0 +1,14 @@
+{
+    "NL": {
+        "name": "[OpenRay] 🇳🇱 NL-19",
+        "config": "trojan://Szb=-Zguo53QhmivcJqEAWtpdPX6Y@95.179.183.126:13345?security=tls&sni=infiniteinjera.semanticstrainer.click#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-19"
+    },
+    "DE": {
+        "name": "[OpenRay] 🇩🇪 DE-3732",
+        "config": "vless://41477c12-82d0-4809-935d-137bd448d823@89.40.117.189:40938?security=&encryption=none&headerType=none&type=tcp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-3732"
+    },
+    "FI": {
+        "name": "[OpenRay] 🇫🇮 FI-132",
+        "config": "vless://fd8972d7-cf5e-11f0-9970-45e1d80c4039@78.153.139.68:8443?security=reality&type=tcp&sni=images.apple.com&fp=chrome&flow=xtls-rprx-vision&sid=58c512b4422e2517&pbk=pekfYPV5U8EjfQ4_zS5c6I2NnOZ2jUlyMGAWa4FWPF4#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-132"
+    }
+}

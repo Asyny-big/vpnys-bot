@@ -19,6 +19,13 @@ const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
   "# =========================================",
 ];
 
+const FAST_SERVERS_BLOCK: ReadonlyArray<string> = [
+  "# =========================================",
+  "# ⚡ Быстрые серверы (YouTube, стриминг)",
+  "# Высокая скорость • Обычный интернет",
+  "# =========================================",
+];
+
 const PRIMARY_SERVER_DISPLAY_NAME = "🔥 LisVPN 🇪🇪 Эстония — Быстро и стабильно";
 
 export type BuildSubscriptionUser = Readonly<{
@@ -42,6 +49,7 @@ export type BuiltSubscription = Readonly<{
 
 export type BuildSubscriptionParams = Readonly<{
   primaryServer?: SubscriptionServer | null;
+  fastServerUrls?: ReadonlyArray<{ displayName: string; configUrl: string }>;
   mobileBypassUrls?: ReadonlyArray<string>;
 }>;
 
@@ -186,6 +194,16 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
 
   lines.push(...PRIMARY_BLOCK);
   lines.push(buildVlessUrl({ ...params.primaryServer, name: PRIMARY_SERVER_DISPLAY_NAME }));
+
+  // Быстрые серверы (если есть)
+  const fastServers = params.fastServerUrls ?? [];
+  if (fastServers.length > 0) {
+    lines.push(...FAST_SERVERS_BLOCK);
+    for (const server of fastServers) {
+      lines.push(withUrlName(server.configUrl, server.displayName));
+    }
+  }
+
   lines.push(...MOBILE_BYPASS_BLOCK);
 
   const mobileUrls = (params.mobileBypassUrls ?? []).map((u) => u.trim()).filter(Boolean);

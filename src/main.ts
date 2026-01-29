@@ -2,6 +2,8 @@ import { run } from "@grammyjs/runner";
 import Fastify from "fastify";
 import { loadEnv } from "./config/env";
 import { MOBILE_BYPASS_URLS } from "./config/mobileBypass";
+import { loadFastServers } from "./config/fastServers";
+import * as path from "path";
 import { getPrisma } from "./db/prisma";
 import { ThreeXUiApiClient } from "./integrations/threeXui/threeXuiApiClient";
 import { ThreeXUiService } from "./integrations/threeXui/threeXuiService";
@@ -24,6 +26,10 @@ import { AdminUserDeletionService } from "./modules/admin/userDeletionService";
 async function main(): Promise<void> {
   const env = loadEnv();
   const prisma = getPrisma();
+
+  // Загружаем быстрые серверы из JSON (graceful degradation если файл отсутствует)
+  const fastServersPath = path.resolve(__dirname, "../fast-servers.json");
+  const FAST_SERVER_ENTRIES = loadFastServers(fastServersPath);
 
   const xuiApi = new ThreeXUiApiClient({
     baseUrl: env.xuiBaseUrl,
@@ -101,6 +107,7 @@ async function main(): Promise<void> {
       xui,
       backendPublicUrl: env.backendPublicUrl,
       telegramBotUrl: env.telegramBotUrl,
+      fastServerUrls: FAST_SERVER_ENTRIES,
       mobileBypassUrls: MOBILE_BYPASS_URLS,
       xuiInboundId: env.xuiInboundId,
       xuiClientFlow: env.xuiClientFlow,

@@ -41,6 +41,7 @@ export async function registerSubscriptionRoutes(
     xui: ThreeXUiService;
     backendPublicUrl: string;
     telegramBotUrl: string;
+    fastServerUrls: ReadonlyArray<{ displayName: string; configUrl: string }>;
     mobileBypassUrls: ReadonlyArray<string>;
     xuiInboundId: number;
     xuiClientFlow?: string;
@@ -839,7 +840,7 @@ export async function registerSubscriptionRoutes(
 
       const built = buildSubscription(
         { enabled: state.enabled, expiresAt: effectiveExpiresAt, telegramBotUrl: deps.telegramBotUrl },
-        { primaryServer, mobileBypassUrls: deps.mobileBypassUrls },
+        { primaryServer, fastServerUrls: deps.fastServerUrls, mobileBypassUrls: deps.mobileBypassUrls },
       );
 
       for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
