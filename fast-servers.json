@@ -6,8 +6,8 @@
         "ttfb": 0.235809
     },
     "DE": {
-        "name": "[OpenRay] 🇩🇪 DE-5257",
-        "config": "vmess://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh6nwn4eqIERFLTUyNTciLCJhZGQiOiI4NS4xOTUuMTAxLjEyMiIsInBvcnQiOjQwODc4LCJpZCI6ImYzZDQxNjdlLWIxNWUtNGU0Ni04MmU5LTkyODZlZjkzZmRhNyIsImFpZCI6MCwic2N5IjoiYXV0byIsIm5ldCI6InRjcCIsInR5cGUiOiJub25lIiwiaG9zdCI6IiIsInBhdGgiOiIiLCJ0bHMiOiJhdXRvIiwic25pIjoiIiwiYWxwbiI6IiIsImZwIjoiIn0=",
+        "name": "[OpenRay] 🇩🇪 DE-4660",
+        "config": "vless://b338a8f4-9aa3-4e1d-b6b7-5efed8ae038b@85.195.101.122:48129?encryption=none&packetEncoding=xudp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-4660",
         "bandwidth": 44.11,
         "ttfb": 0.143493
     },
