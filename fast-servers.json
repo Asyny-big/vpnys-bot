@@ -7,7 +7,7 @@
     },
     "DE": {
         "name": "[OpenRay] 🇩🇪 DE-5257",
-        "config": "vless://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh6nwn4eqIERFLTUyNTciLCJhZGQiOiI4NS4xOTUuMTAxLjEyMiIsInBvcnQiOjQwODc4LCJpZCI6ImYzZDQxNjdlLWIxNWUtNGU0Ni04MmU5LTkyODZlZjkzZmRhNyIsImFpZCI6MCwic2N5IjoiYXV0byIsIm5ldCI6InRjcCIsInR5cGUiOiJub25lIiwiaG9zdCI6IiIsInBhdGgiOiIiLCJ0bHMiOiJhdXRvIiwic25pIjoiIiwiYWxwbiI6IiIsImZwIjoiIn0=",
+        "config": "vmess://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh6nwn4eqIERFLTUyNTciLCJhZGQiOiI4NS4xOTUuMTAxLjEyMiIsInBvcnQiOjQwODc4LCJpZCI6ImYzZDQxNjdlLWIxNWUtNGU0Ni04MmU5LTkyODZlZjkzZmRhNyIsImFpZCI6MCwic2N5IjoiYXV0byIsIm5ldCI6InRjcCIsInR5cGUiOiJub25lIiwiaG9zdCI6IiIsInBhdGgiOiIiLCJ0bHMiOiJhdXRvIiwic25pIjoiIiwiYWxwbiI6IiIsImZwIjoiIn0=",
         "bandwidth": 44.11,
         "ttfb": 0.143493
     },
