@@ -1,20 +1,20 @@
 {
     "NL": {
-        "name": "[OpenRay] 🇳🇱 NL-461",
-        "config": "vless://b129eb83-f083-4660-a81a-e5991519a281@212.111.82.236:443?encryption=none&security=reality&sni=eh.vk.ru&fp=chrome&pbk=ZVfaZBEaPWlmb-Srxncu2WDACudPbm48S1V1Zy2ZcRw&sid=78523b486884cc4d&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-461",
-        "bandwidth": 35.68,
-        "ttfb": 0.346192
+        "name": "[OpenRay] 🇳🇱 NL-546",
+        "config": "vless://d9fa5060-431d-4f67-b4e1-ad4533fdf4e4@94.103.94.48:443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=www.google.com&fp=chrome&security=reality&pbk=2fgsbEAn-ALVpjnE4ZTPrzaZY70vVplYwldCnslInE0&sid=86b80f1e713a33ad#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-546",
+        "bandwidth": 40.25,
+        "ttfb": 0.235809
     },
     "DE": {
-        "name": "[OpenRay] 🇩🇪 DE-4660",
-        "config": "vless://b338a8f4-9aa3-4e1d-b6b7-5efed8ae038b@85.195.101.122:48129?encryption=none&packetEncoding=xudp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-4660",
-        "bandwidth": 40.15,
-        "ttfb": 0.156419
+        "name": "[OpenRay] 🇩🇪 DE-5257",
+        "config": "vmess://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh6nwn4eqIERFLTUyNTciLCJhZGQiOiI4NS4xOTUuMTAxLjEyMiIsInBvcnQiOjQwODc4LCJpZCI6ImYzZDQxNjdlLWIxNWUtNGU0Ni04MmU5LTkyODZlZjkzZmRhNyIsImFpZCI6MCwic2N5IjoiYXV0byIsIm5ldCI6InRjcCIsInR5cGUiOiJub25lIiwiaG9zdCI6IiIsInBhdGgiOiIiLCJ0bHMiOiJhdXRvIiwic25pIjoiIiwiYWxwbiI6IiIsImZwIjoiIn0=",
+        "bandwidth": 44.11,
+        "ttfb": 0.143493
     },
     "FI": {
-        "name": "🇩🇰[openproxylist.com] vless-DK",
-        "config": "vless://e4fc4761-154f-490e-bbaa-b4fa193f1073@45.148.31.0:15855?type=ws&security=none&path=%2F#🇩🇰[openproxylist.com] vless-DK",
-        "bandwidth": 26.71,
-        "ttfb": 0.387486
+        "name": "[OpenRay] 🇫🇮 FI-198",
+        "config": "vless://726fbc17-dd31-49fc-93b6-75af1abad99e@94.131.100.216:443/?type=grpc&encryption=none&flow=&sni=keyinvest.org&fp=chrome&security=reality&pbk=G39Eg-wogA8ErCPDN0SOwh-9QHJ-PrIIs_EKVvPeeAY&sid=#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-198",
+        "bandwidth": 63.37,
+        "ttfb": 0.208766
     }
 }
