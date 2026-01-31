@@ -1,7 +1,7 @@
 {
     "NL": {
         "name": "[OpenRay] 🇳🇱 NL-471",
-        "config": "vless://6b1c3308-9bb4-45bc-8387-25c969a8c8f9@79.133.180.45:443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=www.microsoft.com&fp=chrome&security=reality&pbk=45ui5TpjfPf6HmRyT4M53XnR9tOXjpcLRLmaRyhlPiQ&sid=d7325e33#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-471",
+        "config": "vless://6b1c3308-9bb4-45bc-8387-25c969a8c8f9@79.133.180.45:443?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=www.microsoft.com&fp=chrome&security=reality&pbk=45ui5TpjfPf6HmRyT4M53XnR9tOXjpcLRLmaRyhlPiQ&sid=d7325e33#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-471",
         "bandwidth": 27.36,
         "ttfb": 0.479466
     },
