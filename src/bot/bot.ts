@@ -124,7 +124,7 @@ export function buildBot(deps: BotDeps): Bot {
       const blocked = await deps.bans.isBlocked(telegramId);
       if (!blocked) return true;
       if (ctx.callbackQuery) {
-        await ctx.answerCallbackQuery({ text: blockedText, show_alert: true }).catch(() => {});
+        await ctx.answerCallbackQuery({ text: blockedText, show_alert: true }).catch(() => { });
       }
       await replyOrEdit(ctx, blockedText, { reply_markup: MAIN_KEYBOARD });
       return false;
@@ -307,7 +307,6 @@ export function buildBot(deps: BotDeps): Bot {
     kb.text("📱 Устройства", "nav:devices").text("💳 Подписка", "nav:sub").row();
     kb.text("🎁 Ввести промокод", "nav:promo").row();
     kb.text("👥 Мои друзья", "nav:friends").row();
-    kb.text("📄 Оферта", "nav:offer").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
@@ -384,7 +383,6 @@ export function buildBot(deps: BotDeps): Bot {
     const kb = new InlineKeyboard().url("🚀 Подключить VPN", subscriptionUrl).row();
     if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
     kb.text("📄 Инструкция", "nav:guide")
-      .text("📄 Оферта", "nav:offer")
       .row()
       .text("🏠 Личный кабинет", "nav:cabinet")
       .row()
@@ -714,7 +712,7 @@ export function buildBot(deps: BotDeps): Bot {
         extraLines.push(`🎉 Вас пригласил ${inviterLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`);
 
         const invitedLabel = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? `ID ${telegramId}`;
-        await ctx.api.sendMessage(Number(result.referralReward.inviterTelegramId), `🎉 У вас новый друг: ${invitedLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`).catch(() => {});
+        await ctx.api.sendMessage(Number(result.referralReward.inviterTelegramId), `🎉 У вас новый друг: ${invitedLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`).catch(() => { });
       } catch {
         // Best-effort: registration and reward are already done in backend.
       }
@@ -781,7 +779,7 @@ export function buildBot(deps: BotDeps): Bot {
     );
 
     // Best-effort: propagate paidUntil to 3x-ui right away, so panel shows the new date without waiting for the worker tick.
-    await deps.subscriptions.syncFromXui(required.user).catch(() => {});
+    await deps.subscriptions.syncFromXui(required.user).catch(() => { });
   });
 
   bot.command("delete_user", async (ctx) => {
@@ -816,7 +814,7 @@ export function buildBot(deps: BotDeps): Bot {
       await replyOrEdit(ctx, `🧹 Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> удалён (без бана)`, { parse_mode: "HTML" });
       await ctx.api
         .sendMessage(Number(result.targetTelegramId), "Ваш аккаунт LisVPN был удалён администратором. Вы можете зарегистрироваться снова: /start")
-        .catch(() => {});
+        .catch(() => { });
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error("delete_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
@@ -854,7 +852,7 @@ export function buildBot(deps: BotDeps): Bot {
         [`⛔ Пользователь <code>${escapeHtml(result.targetTelegramId)}</code> заблокирован`, `Причина: ${escapeHtml(reasonFinal)}`].join("\n"),
         { parse_mode: "HTML" },
       );
-      await ctx.api.sendMessage(Number(result.targetTelegramId), blockedText).catch(() => {});
+      await ctx.api.sendMessage(Number(result.targetTelegramId), blockedText).catch(() => { });
     } catch (e: any) {
       // eslint-disable-next-line no-console
       console.error("ban_user failed", { adminTelegramId, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
@@ -947,32 +945,8 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, `✅ Промокод добавлен: ${created.promo.code}, ${created.promo.bonusDays} дней`);
   });
 
-  bot.hears("🚀 Подключить VPN", async (ctx) => {
-    const required = await requireUser(ctx);
-    if (!required) return;
-
-    const state = await deps.subscriptions.syncFromXui(required.user);
-    const effectiveExpiresAt =
-      state.expiresAt && state.subscription.paidUntil
-        ? (state.expiresAt.getTime() > state.subscription.paidUntil.getTime() ? state.expiresAt : state.subscription.paidUntil)
-        : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
-    const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
-    if (active) {
-      await showMySubscription(ctx);
-      return;
-    }
-
-    await showBuyConfig(ctx, CheckoutFlow.BUY, 30, MIN_DEVICE_LIMIT);
-  });
   bot.hears("🏠 Личный кабинет", showCabinet);
-  bot.hears("📱 Устройства", showDevices);
-  bot.hears("💳 Подписка", showMySubscription);
-  bot.hears("📄 Оферта", async (ctx) => {
-    await showOffer(ctx);
-  });
   bot.hears("🆘 Поддержка", showSupport);
-
-  bot.hears("\uD83D\uDC65 \u041C\u043E\u0438 \u0434\u0440\u0443\u0437\u044C\u044F", showFriends);
 
   bot.callbackQuery("nav:cabinet", async (ctx) => {
     await ctx.answerCallbackQuery();
@@ -998,10 +972,7 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     await showGuide(ctx);
   });
-  bot.callbackQuery("nav:offer", async (ctx) => {
-    await ctx.answerCallbackQuery();
-    await showOffer(ctx);
-  });
+
   bot.callbackQuery("nav:support", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showSupport(ctx);
