@@ -10,7 +10,7 @@ type Env = Readonly<{
 
   databaseUrl: string;
   telegramBotToken: string;
-  // Public bot URL shown to users in subscription messages (e.g. when expired).
+  // Public bot URL shown too users in subscription messages (e.g. when expired).
   telegramBotUrl: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
