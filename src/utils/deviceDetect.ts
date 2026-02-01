@@ -196,7 +196,7 @@ function generateFingerprint(data: {
  * Log device info to console in the expected format.
  * Only logs if User-Agent is present.
  */
-export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string): void {
+export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string, headers?: ClientHintsHeaders): void {
   if (!deviceInfo.rawUserAgent) {
     return;
   }
@@ -206,6 +206,19 @@ export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string): void {
   console.log(`${prefix}PLATFORM: ${deviceInfo.platform}`);
   console.log(`${prefix}MODEL: ${deviceInfo.model ?? "Unknown"}${deviceInfo.modelSource === "hints" ? " (from Client Hints)" : ""}`);
   console.log(`${prefix}FINGERPRINT: ${deviceInfo.fingerprint}`);
+  
+  // Log Client Hints if present (for debugging)
+  if (headers) {
+    const hints: string[] = [];
+    if (headers["sec-ch-ua-model"]) hints.push(`model=${headers["sec-ch-ua-model"]}`);
+    if (headers["sec-ch-ua-platform"]) hints.push(`platform=${headers["sec-ch-ua-platform"]}`);
+    if (headers["sec-ch-ua-platform-version"]) hints.push(`version=${headers["sec-ch-ua-platform-version"]}`);
+    if (headers["sec-ch-ua-mobile"]) hints.push(`mobile=${headers["sec-ch-ua-mobile"]}`);
+    
+    if (hints.length > 0) {
+      console.log(`${prefix}CLIENT_HINTS: ${hints.join(", ")}`);
+    }
+  }
 }
 
 /**
@@ -222,6 +235,6 @@ export function detectAndLogDevice(
     ? parseUserAgent(headers)
     : parseWithClientHints(headers, clientIp);
   
-  logDeviceInfo(info, context);
+  logDeviceInfo(info, context, typeof headers === "object" ? headers : undefined);
   return info;
 }
