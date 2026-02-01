@@ -949,9 +949,14 @@ export async function registerSubscriptionRoutes(
             return { success: false, error: "Ошибка регистрации устройства" };
           });
 
-          // If device limit reached, block connection
+          // If device limit reached, block connection with specific message
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-            await replyExpired(`⚠️ ПРЕВЫШЕН ЛИМИТ УСТРОЙСТВ\n\nУдалите старое устройство или купите дополнительный слот в боте: ${deps.telegramBotUrl}`);
+            const built = buildSubscription(
+              { enabled: true, expiresAt: effectiveExpiresAt, limitReached: true, telegramBotUrl: deps.telegramBotUrl },
+              { primaryServer: null, mobileBypassUrls: [] },
+            );
+            for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
+            await reply.code(200).send(built.body);
             return;
           }
         }

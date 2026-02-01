@@ -26,6 +26,7 @@ const PRIMARY_SERVER_DISPLAY_NAME = "🇪🇪 Эстония 🚀 (Быстры�
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
   enabled: boolean;
+  limitReached?: boolean;
   telegramBotUrl: string;
 }>;
 
@@ -65,7 +66,7 @@ function rfc5987Encode(value: string): string {
     .replace(/\*/g, "%2A");
 }
 
-function buildHeaders(params: { title: string; expireUnix: number; telegramBotUrl: string; isExpired?: boolean }): Record<string, string> {
+function buildHeaders(params: { title: string; expireUnix: number; telegramBotUrl: string; isExpired?: boolean; limitReached?: boolean }): Record<string, string> {
   const title = params.title;
   const expireUnix = params.expireUnix;
 
@@ -95,7 +96,10 @@ function buildHeaders(params: { title: string; expireUnix: number; telegramBotUr
 
   // Add announcement message for Happ/Hiddify (max 200 chars)
   // Happ displays this as a banner/notice to users
-  if (params.isExpired) {
+  if (params.limitReached) {
+    headers["Profile-Update-Interval"] = "1"; // Check every hour
+    headers["announce"] = `base64:${base64Utf8("⚠️ Превышен лимит устройств. Удалите лишние устройства в боте или купите доп. слот.")}`;
+  } else if (params.isExpired) {
     headers["Profile-Update-Interval"] = "1"; // Check every hour for renewal
     headers["announce"] = `base64:${base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram для продления →")}`;
   } else {
@@ -159,11 +163,19 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
 
   const expireUnix = unixSeconds(user.expiresAt);
   const headers = buildHeaders({
-    title: SUBSCRIPTION_TITLE,
     expireUnix,
     telegramBotUrl: user.telegramBotUrl,
     isExpired,
+    limitReached: user.limitReached,
   });
+
+  if (user.limitReached) {
+    // Return a valid but empty config to avoid parsing errors
+    return {
+      headers,
+      body: "# ⚠️ DEVICE LIMIT REACHED.\n# Manage devices in the bot.\n",
+    };
+  }
 
   if (isExpired) {
     // Return empty body - clients will clear all servers without parse errors
