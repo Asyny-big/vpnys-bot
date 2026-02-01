@@ -1204,7 +1204,7 @@ export function buildBot(deps: BotDeps): Bot {
     const provider = ctx.match[1] === "yookassa" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
 
     try {
-      const result = await deps.payments.createDeviceSlotPayment(required.user, { provider });
+      const result = await deps.payments.createDeviceSlotCheckout({ user: required.user, provider });
       
       const keyboard = new InlineKeyboard().url("💳 Оплатить", result.payUrl).row().text("🔙 Назад", "devices:buy_slot");
       

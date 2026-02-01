@@ -202,7 +202,7 @@ export async function registerSubscriptionRoutes(
           return { success: false, error: "Ошибка регистрации устройства" };
         });
         
-        if (!registerResult.success && registerResult.errorCode === "LIMIT_REACHED") {
+        if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
           deviceError = registerResult.error;
         }
       }
