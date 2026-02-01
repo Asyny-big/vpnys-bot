@@ -87,10 +87,13 @@ export async function registerSubscriptionRoutes(
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
 
     // Request Client Hints for better device detection on Android 10+
+    // Critical-CH forces browser to retry request with hints immediately
     reply.header("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
+    reply.header("Critical-CH", "Sec-CH-UA-Model");
 
-    // Log device info for testing (supports Client Hints)
-    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`);
+    // Log device info for testing (supports Client Hints + IP-based fingerprint)
+    const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
+    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
 
     const publicOrigin = publicOriginFromRequest(req);
     const baseSubUrl = `${publicOrigin.replace(/\/+$/, "")}/sub/${encodeURIComponent(token)}`;
@@ -793,8 +796,9 @@ export async function registerSubscriptionRoutes(
     // Request Client Hints for better device detection on Android 10+
     reply.header("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
 
-    // Log device info for testing (supports Client Hints)
-    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`);
+    // Log device info for testing (supports Client Hints + IP-based fingerprint)
+    const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
+    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
     try {
       const row = await deps.prisma.subscription.findUnique({

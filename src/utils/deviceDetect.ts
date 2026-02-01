@@ -3,12 +3,16 @@
  * Safe for production use - only logs, no DB writes.
  */
 
+import { createHash } from "node:crypto";
+
 export interface DeviceInfo {
   platform: "Android" | "iOS" | "Windows" | "macOS" | "Linux" | "Unknown";
   model: string | null;
   rawUserAgent: string;
   /** Source of model info: 'ua' (User-Agent), 'hints' (Client Hints), or null */
   modelSource: "ua" | "hints" | null;
+  /** Device fingerprint hash for identifying unique devices */
+  fingerprint: string;
 }
 
 /**
@@ -32,7 +36,13 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
   const ua = userAgent?.trim() ?? "";
 
   if (!ua) {
-    return { platform: "Unknown", model: null, rawUserAgent: "", modelSource: null };
+    return { 
+      platform: "Unknown", 
+      model: null, 
+      rawUserAgent: "", 
+      modelSource: null,
+      fingerprint: generateFingerprint({ ua: "", ip: null, hints: {} }),
+    };
   }
 
   // Detect platform
@@ -78,7 +88,13 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
     platform = "Linux";
   }
 
-  return { platform, model, rawUserAgent: ua, modelSource: model ? "ua" : null };
+  return { 
+    platform, 
+    model, 
+    rawUserAgent: ua, 
+    modelSource: model ? "ua" : null,
+    fingerprint: generateFingerprint({ ua, ip: null, hints: {} }),
+  };
 }
 
 /**
@@ -103,7 +119,7 @@ function isGenericAndroidModel(model: string): boolean {
  * To enable Client Hints, server should send response header:
  * Accept-CH: Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version
  */
-export function parseWithClientHints(headers: ClientHintsHeaders): DeviceInfo {
+export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: string): DeviceInfo {
   // First, parse standard User-Agent
   const baseInfo = parseUserAgent(headers["user-agent"]);
 
@@ -124,7 +140,56 @@ export function parseWithClientHints(headers: ClientHintsHeaders): DeviceInfo {
     baseInfo.modelSource = "hints";
   }
 
+  // Regenerate fingerprint with IP and hints
+  baseInfo.fingerprint = generateFingerprint({
+    ua: baseInfo.rawUserAgent,
+    ip: clientIp ?? null,
+    hints: {
+      model: hintModel,
+      platform: hintPlatform,
+      platformVersion: headers["sec-ch-ua-platform-version"],
+      mobile: headers["sec-ch-ua-mobile"],
+    },
+  });
+
   return baseInfo;
+}
+
+/**
+ * Generate device fingerprint from available data.
+ * WARNING: Not 100% reliable - same device can have different fingerprints
+ * (e.g., different browsers, IP changes). Use only for soft limits, not security.
+ */
+function generateFingerprint(data: {
+  ua: string;
+  ip: string | null;
+  hints: {
+    model?: string;
+    platform?: string;
+    platformVersion?: string;
+    mobile?: string;
+  };
+}): string {
+  // Combine available signals
+  const parts: string[] = [
+    data.ua || "unknown",
+    data.hints.model || "",
+    data.hints.platform || "",
+    data.hints.platformVersion || "",
+    data.hints.mobile || "",
+  ];
+
+  // Add partial IP (first 2 octets for IPv4, first 2 segments for IPv6)
+  // This helps distinguish devices but tolerates dynamic IPs
+  if (data.ip) {
+    const ipPart = data.ip.includes(":")
+      ? data.ip.split(":").slice(0, 2).join(":") // IPv6
+      : data.ip.split(".").slice(0, 2).join("."); // IPv4
+    parts.push(ipPart);
+  }
+
+  const combined = parts.join("|");
+  return createHash("sha256").update(combined).digest("hex").slice(0, 16);
 }
 
 /**
@@ -140,6 +205,7 @@ export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string): void {
   console.log(`${prefix}RAW UA: ${deviceInfo.rawUserAgent}`);
   console.log(`${prefix}PLATFORM: ${deviceInfo.platform}`);
   console.log(`${prefix}MODEL: ${deviceInfo.model ?? "Unknown"}${deviceInfo.modelSource === "hints" ? " (from Client Hints)" : ""}`);
+  console.log(`${prefix}FINGERPRINT: ${deviceInfo.fingerprint}`);
 }
 
 /**
@@ -149,11 +215,12 @@ export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string): void {
 export function detectAndLogDevice(
   headers: string | ClientHintsHeaders | undefined | null,
   context?: string,
+  clientIp?: string,
 ): DeviceInfo {
   // If passed a string, treat as User-Agent only
   const info = typeof headers === "string" || headers === null || headers === undefined
     ? parseUserAgent(headers)
-    : parseWithClientHints(headers);
+    : parseWithClientHints(headers, clientIp);
   
   logDeviceInfo(info, context);
   return info;
