@@ -65,7 +65,7 @@ function rfc5987Encode(value: string): string {
     .replace(/\*/g, "%2A");
 }
 
-function buildHeaders(params: { title: string; expireUnix: number; telegramBotUrl: string; isExpired?: boolean }): Record<string, string> {
+function buildHeaders(params: { title: string; expireUnix: number; telegramBotUrl: string; isExpired?: boolean; customMessage?: string }): Record<string, string> {
   const title = params.title;
   const expireUnix = params.expireUnix;
 
@@ -95,7 +95,10 @@ function buildHeaders(params: { title: string; expireUnix: number; telegramBotUr
 
   // Add announcement message for Happ/Hiddify (max 200 chars)
   // Happ displays this as a banner/notice to users
-  if (params.isExpired) {
+  if (params.customMessage) {
+    headers["Profile-Update-Interval"] = "1";
+    headers["announce"] = `base64:${base64Utf8(params.customMessage)}`;
+  } else if (params.isExpired) {
     headers["Profile-Update-Interval"] = "1"; // Check every hour for renewal
     headers["announce"] = `base64:${base64Utf8("⚠️ Подписка истекла. Оплатите в Telegram для продления →")}`;
   } else {
@@ -109,6 +112,14 @@ function buildExpiredText(botUrl: string): string {
   return [
     `❌ Подписка ${SUBSCRIPTION_BRAND} истекла.`,
     "🔁 Для продления перейдите в Telegram:",
+    botUrl,
+  ].join("\n");
+}
+
+function buildDeviceLimitText(botUrl: string): string {
+  return [
+    `⚠️ Достигнут лимит устройств для подписки ${SUBSCRIPTION_BRAND}.`,
+    "📱 Удалите старое устройство или купите дополнительный слот в Telegram:",
     botUrl,
   ].join("\n");
 }
@@ -152,7 +163,7 @@ function withUrlName(rawUrl: string, name: string): string {
   return `${base}#${encodeURIComponent(name)}`;
 }
 
-export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubscriptionParams): BuiltSubscription {
+export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubscriptionParams, customMessage?: string): BuiltSubscription {
   const nowMs = Date.now();
   const expiresMs = user.expiresAt ? user.expiresAt.getTime() : 0;
   const isExpired = !user.enabled || !user.expiresAt || expiresMs <= nowMs;
@@ -163,9 +174,10 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
     expireUnix,
     telegramBotUrl: user.telegramBotUrl,
     isExpired,
+    customMessage,
   });
 
-  if (isExpired) {
+  if (isExpired || customMessage) {
     // Return empty body - clients will clear all servers without parse errors
     // UX messages are sent via Telegram and shown via Support-URL button
     return {
