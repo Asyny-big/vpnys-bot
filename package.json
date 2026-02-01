@@ -16,7 +16,7 @@
     "prisma:migrate:deploy": "prisma migrate deploy"
   },
   "dependencies": {
-    "@grammyjs/runner": "^2.0.4",
+    "@grammyjs/runner": "^2.0.3",
     "@prisma/client": "^5.19.1",
     "fastify": "^4.28.1",
     "grammy": "^1.35.0"
