@@ -33,6 +33,45 @@ function formatDateRu(date: Date): string {
   return `${dd}.${mm}.${yyyy}`;
 }
 
+function logUserAgentDetails(ua: string | undefined): void {
+  if (!ua) return;
+
+  try {
+    let platform = "Unknown";
+    let model = "";
+
+    if (/android/i.test(ua)) {
+      platform = "Android";
+      // Try to capture model: "Android <ver>; <Model> Build" or "Android <ver>; <Model>)"
+      // Example: Linux; Android 10; Redmi Note 8 Pro Build/...
+      const match = /Android[^;]*;\s*([^;]+?)\s*(?:Build|\))/i.exec(ua);
+      if (match && match[1]) {
+        model = match[1].trim();
+      }
+    } else if (/ipad|iphone|ipod/i.test(ua)) {
+      platform = "iOS";
+      if (/ipad/i.test(ua)) model = "iPad";
+      else if (/iphone/i.test(ua)) model = "iPhone";
+      else if (/ipod/i.test(ua)) model = "iPod";
+    } else if (/windows nt/i.test(ua)) {
+      platform = "Windows";
+    } else if (/macintosh|mac os x/i.test(ua)) {
+      platform = "macOS";
+    }
+
+    // eslint-disable-next-line no-console
+    console.log(`RAW UA: ${ua}`);
+    // eslint-disable-next-line no-console
+    console.log(`PLATFORM: ${platform}`);
+    if (model) {
+      // eslint-disable-next-line no-console
+      console.log(`MODEL: ${model}`);
+    }
+  } catch (e) {
+    // ignore errors
+  }
+}
+
 export async function registerSubscriptionRoutes(
   app: FastifyInstance,
   deps: Readonly<{
@@ -82,6 +121,7 @@ export async function registerSubscriptionRoutes(
   };
 
   app.get<{ Params: { token: string } }>("/connect/:token", async (req, reply) => {
+    logUserAgentDetails(req.headers["user-agent"]);
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
 
@@ -770,6 +810,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.get<{ Params: { token: string } }>("/sub/:token", async (req, reply) => {
+    logUserAgentDetails(req.headers["user-agent"]);
     const replyExpired = async (prependText?: string): Promise<void> => {
       const built = buildSubscription(
         { enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl },
