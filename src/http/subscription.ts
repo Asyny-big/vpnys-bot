@@ -831,9 +831,8 @@ export async function registerSubscriptionRoutes(
     // Request Client Hints for better device detection on Android 10+
     reply.header("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
 
-    // Log device info for testing (supports Client Hints + IP-based fingerprint)
+    // Get client IP for device fingerprinting
     const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
-    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
     try {
       const row = await deps.prisma.subscription.findUnique({
@@ -868,6 +867,24 @@ export async function registerSubscriptionRoutes(
           : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
+
+      // Check device limit and register/block device
+      if (isActive) {
+        const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
+        
+        if (deviceInfo.fingerprint) {
+          const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
+            req.log.error({ err }, "Failed to register device in /sub/:token");
+            return { success: false, error: "Ошибка регистрации устройства" };
+          });
+          
+          // If device limit reached, block connection
+          if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
+            await replyExpired(`⚠️ ПРЕВЫШЕН ЛИМИТ УСТРОЙСТВ\n\nУдалите старое устройство или купите дополнительный слот в боте: ${deps.telegramBotUrl}`);
+            return;
+          }
+        }
+      }
 
       const primaryServer = isActive
         ? await (async () => {
