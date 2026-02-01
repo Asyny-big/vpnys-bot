@@ -163,6 +163,7 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
 
   const expireUnix = unixSeconds(user.expiresAt);
   const headers = buildHeaders({
+    title: SUBSCRIPTION_TITLE,
     expireUnix,
     telegramBotUrl: user.telegramBotUrl,
     isExpired,
