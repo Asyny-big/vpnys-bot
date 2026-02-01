@@ -825,17 +825,6 @@ export async function registerSubscriptionRoutes(
       await reply.code(200).send(body);
     };
 
-    const replyDeviceLimitReached = async (): Promise<void> => {
-      const message = "⚠️ Достигнут лимит устройств. Удалите старое устройство или купите дополнительный слот в боте →";
-      const built = buildSubscription(
-        { enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl },
-        { primaryServer: null, mobileBypassUrls: [] },
-        message,
-      );
-      for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
-      await reply.code(200).send(built.body);
-    };
-
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
 
@@ -891,7 +880,7 @@ export async function registerSubscriptionRoutes(
           
           // If device limit reached, block connection
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-            await replyDeviceLimitReached();
+            await replyExpired(`⚠️ ПРЕВЫШЕН ЛИМИТ УСТРОЙСТВ\n\nУдалите старое устройство или купите дополнительный слот в боте: ${deps.telegramBotUrl}`);
             return;
           }
         }
