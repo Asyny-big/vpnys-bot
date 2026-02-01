@@ -5,6 +5,7 @@ import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
 import type { SubscriptionService } from "../modules/subscription/subscriptionService";
 import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
+import { UAParser } from "ua-parser-js";
 
 function hostnameFromUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
@@ -31,6 +32,25 @@ function formatDateRu(date: Date): string {
   const mm = String(date.getMonth() + 1).padStart(2, "0");
   const yyyy = String(date.getFullYear());
   return `${dd}.${mm}.${yyyy}`;
+}
+
+function logUserAgentDetails(ua: string | undefined): void {
+  if (!ua) return;
+  try {
+    const parser = new UAParser(ua);
+    const os = parser.getOS();
+    const device = parser.getDevice();
+    // eslint-disable-next-line no-console
+    console.log(`RAW UA: ${ua}`);
+    // eslint-disable-next-line no-console
+    console.log(`PARSED PLATFORM: ${os.name ?? ""}`);
+    // eslint-disable-next-line no-console
+    console.log(`PARSED MODEL: ${device.model ?? ""}`);
+    // eslint-disable-next-line no-console
+    console.log("--------------------------------------------------");
+  } catch (e) {
+    // ignore
+  }
 }
 
 export async function registerSubscriptionRoutes(
@@ -82,6 +102,7 @@ export async function registerSubscriptionRoutes(
   };
 
   app.get<{ Params: { token: string } }>("/connect/:token", async (req, reply) => {
+    logUserAgentDetails(req.headers["user-agent"]);
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
 
@@ -770,6 +791,7 @@ export async function registerSubscriptionRoutes(
   });
 
   app.get<{ Params: { token: string } }>("/sub/:token", async (req, reply) => {
+    logUserAgentDetails(req.headers["user-agent"]);
     const replyExpired = async (prependText?: string): Promise<void> => {
       const built = buildSubscription(
         { enabled: false, expiresAt: null, telegramBotUrl: deps.telegramBotUrl },
