@@ -171,10 +171,11 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   });
 
   if (user.limitReached) {
-    // Return a valid but empty config to avoid parsing errors
+    // Return empty body - clients will handle this gracefully
+    // The announce header will show the message to users
     return {
       headers,
-      body: "# ⚠️ DEVICE LIMIT REACHED.\n# Manage devices in the bot.\n",
+      body: "",
     };
   }
 
