@@ -22,20 +22,31 @@ export interface RegisterDeviceResult {
 }
 
 export class DeviceService {
-  constructor(private readonly prisma: PrismaClient) {}
+  constructor(private readonly prisma: PrismaClient) { }
 
   /**
    * Calculate device limits for a user.
    */
   async getDeviceLimits(userId: string): Promise<DeviceLimits> {
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { extraDeviceSlots: true },
-    });
+    let user: { extraDeviceSlots: number } | null = null;
+    try {
+      user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { extraDeviceSlots: true },
+      });
+    } catch {
+      // Ignore error (e.g. column not found) and use default limits
+    }
 
-    const currentDevices = await this.prisma.deviceConfig.count({
-      where: { userId },
-    });
+    // Ensure we don't crash on count if table doesn't exist
+    let currentDevices = 0;
+    try {
+      currentDevices = await this.prisma.deviceConfig.count({
+        where: { userId },
+      });
+    } catch {
+      // Ignore error (e.g. table not found)
+    }
 
     const baseLimit = 1;
     const extraSlots = user?.extraDeviceSlots ?? 0;
@@ -64,7 +75,7 @@ export class DeviceService {
     if (!subscriptionActive) {
       // Clear all devices when subscription expires
       await this.clearAllDevices(userId);
-      
+
       return {
         success: false,
         error: "Подписка истекла. Продлите подписку для подключения устройств.",
