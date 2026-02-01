@@ -1,20 +1,20 @@
 {
-    "NL": {
-        "name": "[OpenRay] 🇳🇱 NL-471",
-        "config": "vless://6b1c3308-9bb4-45bc-8387-25c969a8c8f9@79.133.180.45:443?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=www.microsoft.com&fp=chrome&security=reality&pbk=45ui5TpjfPf6HmRyT4M53XnR9tOXjpcLRLmaRyhlPiQ&sid=d7325e33#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-471",
-        "bandwidth": 27.36,
-        "ttfb": 0.479466
-    },
-    "DE": {
-        "name": "🔥Join+Telegram:@Farah_VPN🟣",
-        "config": "vless://b338a8f4-9aa3-4e1d-b6b7-5efed8ae038b@85.195.101.122:48129?encryption=none&security=none&type=tcp&headerType=none#%F0%9F%94%A5Join%2BTelegram%3A%40Farah_VPN%F0%9F%9F%A3",
-        "bandwidth": 48.59,
-        "ttfb": 0.129693
-    },
-    "FI": {
-        "name": "[OpenRay] 🇫🇮 FI-132",
-        "config": "vless://fd8972d7-cf5e-11f0-9970-45e1d80c4039@78.153.139.68:8443?security=reality&type=tcp&sni=images.apple.com&fp=chrome&flow=xtls-rprx-vision&sid=58c512b4422e2517&pbk=pekfYPV5U8EjfQ4_zS5c6I2NnOZ2jUlyMGAWa4FWPF4#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-132",
-        "bandwidth": 4.32,
-        "ttfb": 0.556924
-    }
+  "NL": {
+    "name": "[OpenRay] 🇳🇱 NL-563",
+    "config": "vless://a44e0875-210f-4941-9062-89b6361a14c6@80.85.245.242:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=i5a8i2AWUSMZ-rYA6hGBRCBBoe7W5ah33SCdF5JkMk4&sid=8bcfe256cf216fd8&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-563",
+    "bandwidth": 43.05,
+    "ttfb": 0.21468
+  },
+  "DE": {
+    "name": "🇩🇪 Germany [SNI-RU] vk.com",
+    "config": "vless://044818b4-a05f-5813-b8f5-63e1e4615827@194.107.126.214:8443?encryption=none&fp=chrome&mode=auto&path=%2F&pbk=JOJ9C3bZafgM5-cMNWQQIgsU7rGSMhXOz89852K-EwQ&security=reality&sid=c39392324d01&sni=vk.com&type=xhttp#%F0%9F%87%A9%F0%9F%87%AA%20Germany%20%5BSNI-RU%5D%20vk.com",
+    "bandwidth": 46.12,
+    "ttfb": 0.350264
+  },
+  "FI": {
+    "name": "🏴‍☠️ @TeleProxyTele",
+    "config": "vless://e4fc4761-154f-490e-bbaa-b4fa193f1073@45.148.31.0:15855?path=%2F&security=none&encryption=none&type=ws#%F0%9F%8F%B4%E2%80%8D%E2%98%A0%EF%B8%8F%20%40TeleProxyTele",
+    "bandwidth": 11.64,
+    "ttfb": 0.394675
+  }
 }
