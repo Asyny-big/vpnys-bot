@@ -5,6 +5,7 @@ import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
 import type { SubscriptionService } from "../modules/subscription/subscriptionService";
 import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
+import { detectAndLogDevice } from "../utils/deviceDetect";
 
 function hostnameFromUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
@@ -84,6 +85,12 @@ export async function registerSubscriptionRoutes(
   app.get<{ Params: { token: string } }>("/connect/:token", async (req, reply) => {
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
+
+    // Request Client Hints for better device detection on Android 10+
+    reply.header("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
+
+    // Log device info for testing (supports Client Hints)
+    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`);
 
     const publicOrigin = publicOriginFromRequest(req);
     const baseSubUrl = `${publicOrigin.replace(/\/+$/, "")}/sub/${encodeURIComponent(token)}`;
@@ -782,6 +789,12 @@ export async function registerSubscriptionRoutes(
 
     const token = String(req.params.token ?? "").trim();
     if (!token) return await reply.code(400).type("text/plain; charset=utf-8").send("Bad request\n");
+
+    // Request Client Hints for better device detection on Android 10+
+    reply.header("Accept-CH", "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version");
+
+    // Log device info for testing (supports Client Hints)
+    detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`);
 
     try {
       const row = await deps.prisma.subscription.findUnique({
