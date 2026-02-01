@@ -101,10 +101,47 @@ export async function registerSubscriptionRoutes(
     const baseSubUrl = `${publicOrigin.replace(/\/+$/, "")}/sub/${encodeURIComponent(token)}`;
 
     try {
-      const row = await deps.prisma.subscription.findUnique({
-        where: { xuiSubscriptionId: token },
-        include: { user: true },
-      });
+      let row: (import("@prisma/client").Subscription & { user: import("@prisma/client").User }) | null = null;
+      try {
+        row = await deps.prisma.subscription.findUnique({
+          where: { xuiSubscriptionId: token },
+          include: { user: true },
+        });
+      } catch (err: any) {
+        req.log.warn({ err }, "Initial findUnique failed, attempting fallback (likely missing DB column)");
+        // Fallback: fetch subscription and user separately, skipping extraDeviceSlots
+        const sub = await deps.prisma.subscription.findUnique({
+          where: { xuiSubscriptionId: token },
+        });
+        if (sub) {
+          const user = await deps.prisma.user.findUnique({
+            where: { id: sub.userId },
+            select: {
+              id: true,
+              telegramId: true,
+              createdAt: true,
+              updatedAt: true,
+              referralCode: true,
+              // Select only essential fields to avoid "column not found" error
+            },
+          });
+          if (user) {
+            // Mock missing fields to satisfy type
+            row = {
+              ...sub,
+              user: {
+                ...user,
+                extraDeviceSlots: 0,
+                trialGrantedAt: null,
+                offerAcceptedAt: null,
+                offerVersion: null,
+                lastPromoActivatedAt: null,
+                referredById: null,
+              } as any,
+            };
+          }
+        }
+      }
 
       if (!row) {
         const html = `<!doctype html>
@@ -194,14 +231,14 @@ export async function registerSubscriptionRoutes(
       // Register or update device (but don't block page load on errors)
       const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
       const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
-      
+
       let deviceError: string | undefined;
       if (deviceInfo.fingerprint) {
         const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
           req.log.error({ err }, "Failed to register device");
           return { success: false, error: "Ошибка регистрации устройства" };
         });
-        
+
         if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
           deviceError = registerResult.error;
         }
@@ -835,10 +872,44 @@ export async function registerSubscriptionRoutes(
     const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
 
     try {
-      const row = await deps.prisma.subscription.findUnique({
-        where: { xuiSubscriptionId: token },
-        include: { user: true },
-      });
+      let row: (import("@prisma/client").Subscription & { user: import("@prisma/client").User }) | null = null;
+      try {
+        row = await deps.prisma.subscription.findUnique({
+          where: { xuiSubscriptionId: token },
+          include: { user: true },
+        });
+      } catch (err: any) {
+        req.log.warn({ err }, "Initial findUnique in /sub failed, attempting fallback");
+        const sub = await deps.prisma.subscription.findUnique({
+          where: { xuiSubscriptionId: token },
+        });
+        if (sub) {
+          const user = await deps.prisma.user.findUnique({
+            where: { id: sub.userId },
+            select: {
+              id: true,
+              telegramId: true,
+              createdAt: true,
+              updatedAt: true,
+              referralCode: true,
+            },
+          });
+          if (user) {
+            row = {
+              ...sub,
+              user: {
+                ...user,
+                extraDeviceSlots: 0,
+                trialGrantedAt: null,
+                offerAcceptedAt: null,
+                offerVersion: null,
+                lastPromoActivatedAt: null,
+                referredById: null,
+              } as any,
+            };
+          }
+        }
+      }
 
       if (!row) {
         await replyExpired();
@@ -871,13 +942,13 @@ export async function registerSubscriptionRoutes(
       // Check device limit and register/block device
       if (isActive) {
         const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
-        
+
         if (deviceInfo.fingerprint) {
           const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
             req.log.error({ err }, "Failed to register device in /sub/:token");
             return { success: false, error: "Ошибка регистрации устройства" };
           });
-          
+
           // If device limit reached, block connection
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
             await replyExpired(`⚠️ ПРЕВЫШЕН ЛИМИТ УСТРОЙСТВ\n\nУдалите старое устройство или купите дополнительный слот в боте: ${deps.telegramBotUrl}`);
