@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import { URL } from "node:url";
 import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
 import type { SubscriptionService } from "../modules/subscription/subscriptionService";
+import type { DeviceService } from "../modules/devices/deviceService";
 import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
 import { detectAndLogDevice } from "../utils/deviceDetect";
@@ -40,6 +41,7 @@ export async function registerSubscriptionRoutes(
     prisma: PrismaClient;
     subscriptions: SubscriptionService;
     xui: ThreeXUiService;
+    devices: DeviceService;
     backendPublicUrl: string;
     telegramBotUrl: string;
     fastServerUrls: ReadonlyArray<{ displayName: string; configUrl: string }>;
@@ -188,6 +190,22 @@ export async function registerSubscriptionRoutes(
           : (state.expiresAt ?? state.subscription.paidUntil ?? undefined);
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
+
+      // Register or update device (but don't block page load on errors)
+      const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
+      const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
+      
+      let deviceError: string | undefined;
+      if (deviceInfo.fingerprint) {
+        const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
+          req.log.error({ err }, "Failed to register device");
+          return { success: false, error: "Ошибка регистрации устройства" };
+        });
+        
+        if (!registerResult.success && registerResult.errorCode === "LIMIT_REACHED") {
+          deviceError = registerResult.error;
+        }
+      }
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
@@ -553,6 +571,23 @@ export async function registerSubscriptionRoutes(
         <div class="logo">🦊</div>
         <div class="brand-name">LisVPN</div>
     </div>
+
+    ${deviceError ? `
+    <!-- Device Limit Warning -->
+    <div class="card" style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3);">
+        <div style="display: flex; align-items: start; gap: 12px;">
+            <div style="font-size: 24px; flex-shrink: 0;">⚠️</div>
+            <div>
+                <div style="font-weight: 700; font-size: 16px; margin-bottom: 6px;">Превышен лимит устройств</div>
+                <div style="font-size: 14px; color: var(--text-muted); line-height: 1.6;">
+                    ${escapeHtml(deviceError)}
+                    <br /><br />
+                    Управляйте устройствами в боте: <a href="${escapeHtml(deps.telegramBotUrl)}" style="color: var(--accent);">@LisVPN_bot</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    ` : ''}
 
     <!-- Status Card -->
     <div class="card">

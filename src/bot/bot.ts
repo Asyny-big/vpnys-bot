@@ -18,6 +18,7 @@ import type { ReferralService } from "../modules/referral/referralService";
 import type { BanService } from "../modules/ban/banService";
 import type { AdminUserDeletionService } from "../modules/admin/userDeletionService";
 import type { AdminUserBanService } from "../modules/admin/userBanService";
+import type { DeviceService } from "../modules/devices/deviceService";
 import { registerBroadcast } from "./broadcast";
 
 export type BotDeps = Readonly<{
@@ -29,6 +30,7 @@ export type BotDeps = Readonly<{
   payments: PaymentService;
   promos: PromoService;
   referrals: ReferralService;
+  devices: DeviceService;
   adminDeletion: AdminUserDeletionService;
   adminBans: AdminUserBanService;
   bans: BanService;
@@ -639,6 +641,87 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
+  const showDevicesMenu = async (ctx: any, userId: string): Promise<void> => {
+    const [devices, limits] = await Promise.all([
+      deps.devices.listDevices(userId),
+      deps.devices.getDeviceLimits(userId),
+    ]);
+
+    let text = `📱 <b>Управление устройствами</b>\n\n`;
+    text += `Лимит: <b>${limits.currentDevices}/${limits.totalLimit}</b>\n\n`;
+
+    if (devices.length === 0) {
+      text += `<i>У вас пока нет подключённых устройств</i>\n\n`;
+      text += `Откройте ссылку подключения с любого устройства, и оно автоматически добавится в список.`;
+    } else {
+      text += `<b>Подключённые устройства:</b>\n\n`;
+      
+      for (const device of devices) {
+        const lastSeen = new Date(device.lastSeenAt);
+        const now = new Date();
+        const diffMs = now.getTime() - lastSeen.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+        
+        let timeAgo = "";
+        if (diffDays === 0) {
+          timeAgo = "сегодня";
+        } else if (diffDays === 1) {
+          timeAgo = "вчера";
+        } else if (diffDays < 7) {
+          timeAgo = `${diffDays} дн. назад`;
+        } else {
+          timeAgo = formatRuDayMonth(lastSeen);
+        }
+
+        text += `${escapeHtml(device.deviceName)}\n`;
+        text += `<i>Последнее подключение: ${timeAgo}</i>\n\n`;
+      }
+    }
+
+    if (limits.availableSlots > 0) {
+      text += `\n✅ Доступно слотов: <b>${limits.availableSlots}</b>`;
+    } else {
+      text += `\n⚠️ Лимит устройств достигнут`;
+    }
+
+    // Build keyboard
+    const keyboard = new InlineKeyboard();
+    
+    // Add remove buttons for each device
+    for (const device of devices) {
+      keyboard.text(`❌ ${device.deviceName.slice(0, 20)}`, `devices:remove:${device.id}`).row();
+    }
+
+    // Add "Buy Slot" button if at limit
+    if (limits.availableSlots === 0) {
+      keyboard.text("💳 Купить дополнительный слот (50₽)", "devices:buy_slot").row();
+    }
+
+    keyboard.text("🔙 Назад в меню", "menu:main");
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
+  };
+
+  const showBuyDeviceSlotMenu = async (ctx: any, userId: string): Promise<void> => {
+    const text = [
+      `💳 <b>Дополнительное устройство</b>\n`,
+      `Стоимость: <b>50 ₽</b>`,
+      ``,
+      `После оплаты вы сможете подключить ещё одно устройство к вашей подписке.`,
+      ``,
+      `<i>Слот действует пока активна подписка</i>`,
+    ].join("\n");
+
+    const keyboard = new InlineKeyboard();
+    
+    // Payment buttons (provider:yookassa or provider:cryptobot)
+    keyboard.text("💳 ЮКassa", `device_slot:pay:yookassa`).row();
+    keyboard.text("💠 Crypto", `device_slot:pay:cryptobot`).row();
+    keyboard.text("🔙 Назад", "devices:list");
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
+  };
+
   const showOffer = async (ctx: any): Promise<void> => {
     await replyOrEdit(ctx, shortPublicOfferText(), { reply_markup: backToCabinetKeyboard(deps) });
   };
@@ -780,6 +863,39 @@ export function buildBot(deps: BotDeps): Bot {
 
     // Best-effort: propagate paidUntil to 3x-ui right away, so panel shows the new date without waiting for the worker tick.
     await deps.subscriptions.syncFromXui(required.user).catch(() => { });
+  });
+
+  bot.command("devices", async (ctx) => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    await showDevicesMenu(ctx, required.user.id);
+  });
+
+  // Callback for device management
+  bot.callbackQuery(/^devices:(.+)$/, async (ctx) => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    const action = ctx.match[1];
+    await ctx.answerCallbackQuery().catch(() => {});
+
+    if (action === "list") {
+      await showDevicesMenu(ctx, required.user.id);
+    } else if (action.startsWith("remove:")) {
+      const deviceId = action.replace("remove:", "");
+      const success = await deps.devices.removeDevice(required.user.id, deviceId);
+      
+      if (success) {
+        await ctx.answerCallbackQuery({ text: "✅ Устройство удалено" }).catch(() => {});
+        await showDevicesMenu(ctx, required.user.id);
+      } else {
+        await ctx.answerCallbackQuery({ text: "❌ Ошибка удаления" }).catch(() => {});
+      }
+    } else if (action === "buy_slot") {
+      // Navigate to buy slot (will implement next)
+      await showBuyDeviceSlotMenu(ctx, required.user.id);
+    }
   });
 
   bot.command("delete_user", async (ctx) => {
@@ -947,8 +1063,17 @@ export function buildBot(deps: BotDeps): Bot {
 
   bot.hears("🏠 Личный кабинет", showCabinet);
   bot.hears("🆘 Поддержка", showSupport);
+  bot.hears("📱 Мои устройства", async (ctx) => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+    await showDevicesMenu(ctx, required.user.id);
+  });
 
   bot.callbackQuery("nav:cabinet", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showCabinet(ctx);
+  });
+  bot.callbackQuery("menu:main", async (ctx) => {
     await ctx.answerCallbackQuery();
     await showCabinet(ctx);
   });
@@ -1068,6 +1193,31 @@ export function buildBot(deps: BotDeps): Bot {
     const planDays = Number(ctx.match[2]) as 30 | 90 | 180;
     const deviceLimit = Number(ctx.match[3]);
     await startSubscriptionCheckout(ctx, CheckoutFlow.EXTEND, providerRaw, planDays, deviceLimit);
+  });
+
+  // Device slot payment
+  bot.callbackQuery(/^device_slot:pay:(yookassa|cryptobot)$/, async (ctx) => {
+    await ctx.answerCallbackQuery();
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    const provider = ctx.match[1] === "yookassa" ? PaymentProvider.YOOKASSA : PaymentProvider.CRYPTOBOT;
+
+    try {
+      const result = await deps.payments.createDeviceSlotPayment(required.user, { provider });
+      
+      const keyboard = new InlineKeyboard().url("💳 Оплатить", result.payUrl).row().text("🔙 Назад", "devices:buy_slot");
+      
+      await replyOrEdit(ctx, 
+        `✅ Счёт создан!\n\nНажмите кнопку ниже для оплаты.\nПосле успешной оплаты слот будет добавлен автоматически.`, 
+        { parse_mode: "HTML", reply_markup: keyboard }
+      );
+    } catch (err: any) {
+      await replyOrEdit(ctx, 
+        `❌ Ошибка создания счёта: ${err?.message ?? "Неизвестная ошибка"}`, 
+        { reply_markup: backToCabinetKeyboard(deps) }
+      );
+    }
   });
 
   bot.callbackQuery("dev:pay", async (ctx) => {

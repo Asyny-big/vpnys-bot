@@ -22,6 +22,7 @@ import { BanService } from "./modules/ban/banService";
 import { AntiAbuseService } from "./modules/antiAbuse/antiAbuseService";
 import { AdminUserBanService } from "./modules/admin/userBanService";
 import { AdminUserDeletionService } from "./modules/admin/userDeletionService";
+import { DeviceService } from "./modules/devices/deviceService";
 
 async function main(): Promise<void> {
   const env = loadEnv();
@@ -41,6 +42,7 @@ async function main(): Promise<void> {
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
   const bans = new BanService(prisma);
   const antiAbuse = new AntiAbuseService(prisma);
+  const devices = new DeviceService(prisma);
   const referrals = new ReferralService(prisma, subscriptions, bans, antiAbuse);
   const onboarding = new OnboardingService(prisma, subscriptions, bans, antiAbuse, referrals, env.backendPublicUrl, { offerVersion: env.offerVersion });
 
@@ -84,6 +86,7 @@ async function main(): Promise<void> {
     payments,
     promos,
     referrals,
+    devices,
     adminDeletion,
     adminBans,
     bans,
@@ -105,6 +108,7 @@ async function main(): Promise<void> {
       prisma,
       subscriptions,
       xui,
+      devices,
       backendPublicUrl: env.backendPublicUrl,
       telegramBotUrl: env.telegramBotUrl,
       fastServerUrls: FAST_SERVER_ENTRIES,

@@ -540,22 +540,24 @@ export class PaymentService {
 
         if (!targetDeviceLimit) {
           const computed = await this.prisma.$transaction(async (tx) => {
-            const subscription = await tx.subscription.findUnique({ where: { userId: payment.userId } });
-            if (!subscription) throw new Error("Subscription not found");
-            const current = clampDeviceLimit(subscription.deviceLimit);
+            const user = await tx.user.findUnique({ where: { id: payment.userId } });
+            if (!user) throw new Error("User not found");
+            
             const slots = Math.max(1, Math.floor(payment.deviceSlots || 1));
-            const target = clampDeviceLimit(Math.min(MAX_DEVICE_LIMIT, current + slots));
-            const updated = current === target
-              ? subscription
-              : await tx.subscription.update({
-                where: { id: subscription.id },
-                data: { deviceLimit: target },
-              });
+            const currentExtra = user.extraDeviceSlots ?? 0;
+            const newExtra = currentExtra + slots;
+            
+            await tx.user.update({
+              where: { id: payment.userId },
+              data: { extraDeviceSlots: newExtra },
+            });
+            
             await tx.payment.update({
               where: { id: payment.id },
-              data: { targetDeviceLimit: updated.deviceLimit },
+              data: { targetDeviceLimit: newExtra },
             });
-            return updated.deviceLimit;
+            
+            return newExtra;
           });
           targetDeviceLimit = computed;
         }
