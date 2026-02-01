@@ -235,6 +235,6 @@ export function detectAndLogDevice(
     ? parseUserAgent(headers)
     : parseWithClientHints(headers, clientIp);
   
-  logDeviceInfo(info, context, typeof headers === "object" ? headers : undefined);
+  logDeviceInfo(info, context, typeof headers === "object" && headers !== null ? headers : undefined);
   return info;
 }
