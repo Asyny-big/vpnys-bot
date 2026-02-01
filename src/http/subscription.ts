@@ -233,6 +233,10 @@ export async function registerSubscriptionRoutes(
       const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
 
       let deviceError: string | undefined;
+      /* 
+         TODO: Re-enable device limits after confirming DB migration is applied.
+         Currently disabled to prevent crashes on missing DeviceConfig table/columns.
+      
       if (deviceInfo.fingerprint) {
         const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
           req.log.error({ err }, "Failed to register device");
@@ -243,6 +247,7 @@ export async function registerSubscriptionRoutes(
           deviceError = registerResult.error;
         }
       }
+      */
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
@@ -943,18 +948,23 @@ export async function registerSubscriptionRoutes(
       if (isActive) {
         const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
+        /* 
+           TODO: Re-enable device limits after confirming DB migration is applied.
+           Currently disabled to prevent crashes on missing DeviceConfig table/columns.
+        
         if (deviceInfo.fingerprint) {
           const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
             req.log.error({ err }, "Failed to register device in /sub/:token");
             return { success: false, error: "Ошибка регистрации устройства" };
           });
-
+          
           // If device limit reached, block connection
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
             await replyExpired(`⚠️ ПРЕВЫШЕН ЛИМИТ УСТРОЙСТВ\n\nУдалите старое устройство или купите дополнительный слот в боте: ${deps.telegramBotUrl}`);
             return;
           }
         }
+        */
       }
 
       const primaryServer = isActive
