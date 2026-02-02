@@ -252,7 +252,6 @@ export function buildBot(deps: BotDeps): Bot {
     const firstName = escapeHtml(String(ctx.from?.first_name ?? "Пользователь"));
     const username = ctx.from?.username ? `@${escapeHtml(String(ctx.from.username))}` : "";
     const telegramId = String(ctx.from?.id ?? "");
-    const referralLink = buildReferralLink(telegramId);
 
     let active = false;
     let expiresAtLabel = "";
@@ -290,7 +289,6 @@ export function buildBot(deps: BotDeps): Bot {
       `Имя: <b>${firstName}</b>`,
       username ? `Username: <b>${username}</b>` : "",
       `Telegram ID: <code>${escapeHtml(telegramId)}</code>`,
-      `🔗 Реферальная ссылка: ${escapeHtml(referralLink)}`,
       "",
       `🔐 <b>VPN</b>: ${statusLine}`,
       deviceLimit ? `📱 <b>Устройства</b>: <b>${escapeHtml(deviceLimit)}</b>` : "",
@@ -307,27 +305,28 @@ export function buildBot(deps: BotDeps): Bot {
 
     kb.text("💳 Подписка", "nav:sub").row();
     kb.text("🎁 Ввести промокод", "nav:promo").row();
-    kb.text("👥 Мои друзья", "nav:friends").row();
+    kb.text("🔗 Рефералка", "nav:ref").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
-  const showFriends = async (ctx: any): Promise<void> => {
+  const showReferral = async (ctx: any): Promise<void> => {
     const required = await requireUser(ctx);
     if (!required) return;
 
+    const referralLink = buildReferralLink(required.telegramId);
     const rows = await deps.referrals.listInvitedFriends({ inviterUserId: required.user.id, take: 50 });
-    if (!rows.length) {
-      await replyOrEdit(ctx, "Вы пока никого не пригласили", { reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
+    const invitedCount = rows.length;
+    const rewardedCount = rows.filter((r) => r.rewardGiven).length;
+    const pendingCount = invitedCount - rewardedCount;
+    const bonusDays = rewardedCount * REFERRAL_REWARD_DAYS;
 
     const now = new Date();
     const maxToShow = 30;
     const shown = rows.slice(0, maxToShow);
 
-    const lines: string[] = [];
+    const invitedLines: string[] = [];
     for (let i = 0; i < shown.length; i++) {
       const row = shown[i];
       let invitedLabel = `ID ${row.invitedTelegramId}`;
@@ -339,11 +338,37 @@ export function buildBot(deps: BotDeps): Bot {
       }
       const registeredAt = formatRuDayMonth(row.invitedCreatedAt, now);
       const rewardLabel = row.rewardGiven ? `+${REFERRAL_REWARD_DAYS} дней` : "ожидает";
-      lines.push(`${i + 1}) ${escapeHtml(invitedLabel)} — ${escapeHtml(registeredAt)} (${rewardLabel})`);
+      invitedLines.push(`${i + 1}) ${escapeHtml(invitedLabel)} — ${escapeHtml(registeredAt)} (${rewardLabel})`);
     }
 
-    const footer = rows.length > maxToShow ? `\n\nПоказаны последние ${maxToShow} из ${rows.length}.` : "";
-    const text = ["👥 <b>Мои друзья</b>", "", ...lines].join("\n") + footer;
+    const listFooter = invitedCount > maxToShow ? `Показаны последние ${maxToShow} из ${invitedCount}.` : "";
+
+    const text = [
+      "🔗 <b>Рефералка</b>",
+      "",
+      "Приглашай друзей — и получайте бонусные дни к подписке.",
+      "",
+      "<b>Твоя ссылка</b>",
+      `<code>${escapeHtml(referralLink)}</code>`,
+      "",
+      "<b>Статистика</b>",
+      `👥 Приглашено: <b>${invitedCount}</b>`,
+      `🎁 Начислено: <b>${bonusDays} дней</b>`,
+      `⏳ Ожидает: <b>${pendingCount}</b>`,
+      "",
+      "<b>Как это работает</b>",
+      `1) Отправь другу ссылку.`,
+      `2) Друг запускает бота впервые по ссылке.`,
+      `3) Если всё ок — вам обоим начислим +${REFERRAL_REWARD_DAYS} дней.`,
+      "",
+      "<i>Бонус начисляется один раз за каждого друга. Если друг уже пользовался ботом или сработает анти-абьюз, начисления может не быть.</i>",
+      "",
+      invitedCount ? "<b>Последние приглашённые</b>" : "<b>Последние приглашённые</b>\n<i>Пока пусто. Отправь ссылку другу — и он появится в списке.</i>",
+      ...(invitedCount ? invitedLines : []),
+      ...(listFooter ? [listFooter] : []),
+    ]
+      .filter(Boolean)
+      .join("\n");
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
@@ -1088,9 +1113,14 @@ export function buildBot(deps: BotDeps): Bot {
     await ctx.answerCallbackQuery();
     await showDevices(ctx);
   });
+  bot.callbackQuery("nav:ref", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    await showReferral(ctx);
+  });
+  // Backward-compat: old inline buttons may still use "nav:friends".
   bot.callbackQuery("nav:friends", async (ctx) => {
     await ctx.answerCallbackQuery();
-    await showFriends(ctx);
+    await showReferral(ctx);
   });
   bot.callbackQuery("nav:guide", async (ctx) => {
     await ctx.answerCallbackQuery();
