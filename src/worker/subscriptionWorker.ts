@@ -201,6 +201,7 @@ export function startSubscriptionWorker(deps: {
                 data: {
                   enabled: false,
                   status: SubscriptionStatus.EXPIRED,
+                  deviceLimit: 0,
                   expiresAt: newExpiresAt,
                   ...(newPaidUntil !== undefined ? { paidUntil: newPaidUntil } : {}),
                   lastSyncedAt: new Date(),
