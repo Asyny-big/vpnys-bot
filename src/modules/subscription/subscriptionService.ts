@@ -81,9 +81,16 @@ export class SubscriptionService {
     }
 
     // 3x-ui is the source of truth for expiresAt.
-    // We only READ from 3x-ui, never push expiresAt back.
-    const expiresAt = client.expiresAt;
+    // We only READ expiryTime (ms) from 3x-ui and WRITE to DB. Never push expiresAt back.
+    const xuiExpiryTimeMs = client.expiryTime; // number | undefined (ms)
     const enabled = client.enabled;
+
+    // Compare as numbers (ms). DB stores DateTime, convert to ms for comparison.
+    const dbExpiresAtMs = subscription.expiresAt ? subscription.expiresAt.getTime() : undefined;
+    const expiryChanged = xuiExpiryTimeMs !== dbExpiresAtMs;
+
+    // Convert to Date for Prisma (or null if undefined/0)
+    const newExpiresAt = xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs > 0 ? new Date(xuiExpiryTimeMs) : null;
 
     // ✅ ИСПРАВЛЕНО: subscription.deviceLimit - это МАКСИМУМ слотов, НЕ количество подключенных устройств.
     // limitIp в 3x-ui должен соответствовать deviceLimit (максимальному количеству устройств).
@@ -91,8 +98,10 @@ export class SubscriptionService {
     if (typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
       await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { deviceLimit: subscription.deviceLimit });
     }
+
+    const nowMs = Date.now();
     const status =
-      expiresAt && expiresAt.getTime() <= Date.now()
+      xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs > 0 && xuiExpiryTimeMs <= nowMs
         ? SubscriptionStatus.EXPIRED
         : enabled
           ? SubscriptionStatus.ACTIVE
@@ -102,12 +111,14 @@ export class SubscriptionService {
       where: { id: subscription.id },
       data: {
         enabled,
-        expiresAt: expiresAt ?? null,
+        expiresAt: newExpiresAt,
         status,
         lastSyncedAt: new Date(),
       },
     });
 
+    // Return expiresAt as Date for compatibility
+    const expiresAt = newExpiresAt ?? undefined;
     return { subscription: updated, expiresAt, enabled };
   }
 

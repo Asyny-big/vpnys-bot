@@ -17,6 +17,8 @@ export type ThreeXUiClientInfo = Readonly<{
   subscriptionId: string;
   email: string;
   expiresAt?: Date;
+  /** Raw expiryTime from 3x-ui in milliseconds (source of truth) */
+  expiryTime?: number;
   enabled: boolean;
   limitIp?: number;
 }>;
@@ -220,14 +222,18 @@ export class ThreeXUiService {
   async listClients(inboundId: number): Promise<ThreeXUiClientInfo[]> {
     const inbound = await this.getInboundOrThrow(inboundId);
     const clients = this.parseClients(inbound.settings);
-    return clients.map((client) => ({
-      uuid: String(client.id),
-      subscriptionId: String(client.subId ?? ""),
-      email: String(client.email ?? ""),
-      expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
-      enabled: client.enable !== false,
-      limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
-    }));
+    return clients.map((client) => {
+      const expiryTime = Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? Number(client.expiryTime) : undefined;
+      return {
+        uuid: String(client.id),
+        subscriptionId: String(client.subId ?? ""),
+        email: String(client.email ?? ""),
+        expiresAt: expiryTime !== undefined ? new Date(expiryTime) : undefined,
+        expiryTime,
+        enabled: client.enable !== false,
+        limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
+      };
+    });
   }
 
   private async getClientRawByUuid(inboundId: number, uuid: string): Promise<any | null> {
@@ -242,11 +248,13 @@ export class ThreeXUiService {
     const client = clients.find((c) => typeof c?.email === "string" && c.email === email);
     if (!client) return null;
 
+    const expiryTime = Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? Number(client.expiryTime) : undefined;
     return {
       uuid: String(client.id),
       subscriptionId: String(client.subId ?? ""),
       email: String(client.email),
-      expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
+      expiresAt: expiryTime !== undefined ? new Date(expiryTime) : undefined,
+      expiryTime,
       enabled: client.enable !== false,
       limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
     };
@@ -258,11 +266,13 @@ export class ThreeXUiService {
     const client = clients.find((c) => String(c?.id) === uuid);
     if (!client) return null;
 
+    const expiryTime = Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? Number(client.expiryTime) : undefined;
     return {
       uuid: String(client.id),
       subscriptionId: String(client.subId ?? ""),
       email: String(client.email ?? ""),
-      expiresAt: Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? new Date(Number(client.expiryTime)) : undefined,
+      expiresAt: expiryTime !== undefined ? new Date(expiryTime) : undefined,
+      expiryTime,
       enabled: client.enable !== false,
       limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
     };

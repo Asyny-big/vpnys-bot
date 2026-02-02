@@ -41,8 +41,10 @@ export function startSubscriptionWorker(deps: {
     isRunning = true;
     try {
       const now = new Date();
+      const nowMs = now.getTime();
 
-      const inboundClientMaps = new Map<number, Map<string, { expiresAt?: Date; enabled: boolean }>>();
+      // Cache: uuid -> { expiryTime (ms), enabled }
+      const inboundClientMaps = new Map<number, Map<string, { expiryTime?: number; enabled: boolean }>>();
 
       const batchSize = 500;
       const maxBatchesPerTick = 10;
@@ -67,6 +69,8 @@ export function startSubscriptionWorker(deps: {
             xuiClientUuid: true,
             xuiSubscriptionId: true,
             deviceLimit: true,
+            expiresAt: true,
+            enabled: true,
           },
           take: batchSize,
         });
@@ -79,9 +83,9 @@ export function startSubscriptionWorker(deps: {
         await runWithConcurrency(inboundIds, 2, async (inboundId) => {
           if (inboundClientMaps.has(inboundId)) return;
           const clients = await deps.xui.listClients(inboundId);
-          const map = new Map<string, { expiresAt?: Date; enabled: boolean }>();
+          const map = new Map<string, { expiryTime?: number; enabled: boolean }>();
           for (const client of clients) {
-            map.set(client.uuid, { expiresAt: client.expiresAt, enabled: client.enabled });
+            map.set(client.uuid, { expiryTime: client.expiryTime, enabled: client.enabled });
           }
           inboundClientMaps.set(inboundId, map);
         });
@@ -96,11 +100,18 @@ export function startSubscriptionWorker(deps: {
             }
 
             // 3x-ui is the source of truth for expiresAt.
-            // We only READ from 3x-ui and WRITE to DB. Never push expiresAt to 3x-ui from worker.
-            const expiresAt = client.expiresAt;
+            // We only READ expiryTime (ms) from 3x-ui and WRITE to DB. Never push expiresAt to 3x-ui from worker.
+            const xuiExpiryTimeMs = client.expiryTime; // number | undefined (ms)
             const enabled = client.enabled;
 
-            const expired = !!expiresAt && expiresAt.getTime() <= now.getTime();
+            // Compare as numbers (ms). DB stores DateTime, convert to ms for comparison.
+            const dbExpiresAtMs = sub.expiresAt ? sub.expiresAt.getTime() : undefined;
+            const expiryChanged = xuiExpiryTimeMs !== dbExpiresAtMs;
+
+            // Convert to Date for Prisma (or null if undefined/0)
+            const newExpiresAt = xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs > 0 ? new Date(xuiExpiryTimeMs) : null;
+
+            const expired = xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs > 0 && xuiExpiryTimeMs <= nowMs;
 
             if (expired) {
               // Only send notification if subscription was previously enabled (first-time expiration)
@@ -109,12 +120,17 @@ export function startSubscriptionWorker(deps: {
               if (enabled) {
                 await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
               }
+
+              if (expiryChanged) {
+                logger.info(`worker: expiresAt changed (expired) sub=${sub.id} db=${dbExpiresAtMs ?? "null"} xui=${xuiExpiryTimeMs ?? "null"}`);
+              }
+
               await deps.prisma.subscription.update({
                 where: { id: sub.id },
                 data: {
                   enabled: false,
                   status: SubscriptionStatus.EXPIRED,
-                  expiresAt: expiresAt ?? null,
+                  expiresAt: newExpiresAt,
                   lastSyncedAt: new Date(),
                 },
               });
@@ -148,15 +164,22 @@ export function startSubscriptionWorker(deps: {
               return;
             }
 
-            await deps.prisma.subscription.update({
-              where: { id: sub.id },
-              data: {
-                enabled,
-                status: enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
-                expiresAt: expiresAt ?? null,
-                lastSyncedAt: new Date(),
-              },
-            });
+            // Only update DB if expiresAt actually changed (or enabled changed)
+            const needsUpdate = expiryChanged || enabled !== sub.enabled;
+            if (needsUpdate) {
+              if (expiryChanged) {
+                logger.info(`worker: expiresAt synced sub=${sub.id} db=${dbExpiresAtMs ?? "null"} -> xui=${xuiExpiryTimeMs ?? "null"}`);
+              }
+              await deps.prisma.subscription.update({
+                where: { id: sub.id },
+                data: {
+                  enabled,
+                  status: enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
+                  expiresAt: newExpiresAt,
+                  lastSyncedAt: new Date(),
+                },
+              });
+            }
           } catch (e: any) {
             logger.error(`worker: failed sub=${sub.id}: ${e?.message ?? String(e)}`);
           }
