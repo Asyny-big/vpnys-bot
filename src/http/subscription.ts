@@ -228,22 +228,15 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // ✅ Проверка/регистрация устройства при первом подключении
-      // IP НЕ участвует в fingerprint
+      // ⚠️ /connect/:token - это HTML-страница для БРАУЗЕРА
+      // ❌ НЕ регистрируем устройство здесь!
+      // Браузер (Mozilla/Chrome/YaBrowser) ≠ VPN-устройство
+      // Устройства регистрируются ТОЛЬКО в /sub/:token (реальное VPN-подключение)
       const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
-      const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
+      detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
 
-      let deviceError: string | undefined = undefined;
-      if (isActive && deviceInfo.fingerprint) {
-        const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
-          req.log.error({ err }, "Failed to register device in /connect/:token");
-          return { success: false, error: "Ошибка регистрации устройства", errorCode: "UNKNOWN" as const };
-        });
-
-        if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-          deviceError = registerResult.error;
-        }
-      }
+      // deviceError не используется - браузер не занимает слот
+      const deviceError: string | undefined = undefined;
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
@@ -940,9 +933,12 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // ✅ Автоматическая регистрация устройств при первом подключении (без IP в fingerprint)
+      // ✅ /sub/:token - ЕДИНСТВЕННОЕ место для регистрации VPN-устройств
+      // Здесь подключается реальный VPN-клиент (Happ, v2ray, sing-box и т.п.)
+      // Браузер (Mozilla/Chrome) регистрируется в /connect/:token, но там registerDevice НЕ вызывается
+      // 
       // Логика слотов:
-      // 1. Устройство существует → разрешить подключение
+      // 1. Устройство существует (по fingerprint без IP) → разрешить подключение
       // 2. Новое устройство + слот есть → создать устройство + разрешить
       // 3. Новое устройство + слота нет → 403, VPN НЕ работает
       if (isActive) {
