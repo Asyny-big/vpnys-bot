@@ -42,7 +42,10 @@ export function calcDevicePricing(input: DevicePricingInput): DevicePricingResul
 	if (extraRubPer30 < 0) throw new Error("extraDeviceRubPer30Days must be >= 0");
 
 	if (input.kind === "new_subscription") {
-		const included = Math.max(0, Math.floor(Number.isFinite(input.includedDevices) ? input.includedDevices : 1));
+		const includedDevices = typeof input.includedDevices === "number" && Number.isFinite(input.includedDevices)
+			? input.includedDevices
+			: 1;
+		const included = Math.max(0, Math.floor(includedDevices));
 		const selected = Math.max(0, Math.floor(Number.isFinite(input.selectedDevices) ? input.selectedDevices : 0));
 		const months = monthsByDaysCeil(input.planDays);
 
