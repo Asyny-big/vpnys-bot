@@ -162,13 +162,24 @@ export function startSubscriptionWorker(deps: {
                 await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
               }
 
-              // Clear all devices ONLY on first expiration (prevents using old devices with new lower-limit subscription)
-              // This is idempotent but we check isFirstExpiration to avoid unnecessary DB queries on every tick
-              if (isFirstExpiration && deps.devices) {
+              // Clear all devices on expiration (prevents using old devices with new lower-limit subscription)
+              // For first expiration: always clear
+              // For already-expired: only clear if there are still devices (handles legacy data migration)
+              if (deps.devices) {
                 try {
-                  const cleared = await deps.devices.clearAllDevices(sub.userId);
-                  if (cleared > 0) {
-                    logger.info(`worker: cleared ${cleared} devices for expired sub=${sub.id}`);
+                  let shouldClear = isFirstExpiration;
+                  
+                  if (!shouldClear) {
+                    // Check if there are any devices left (legacy cleanup)
+                    const deviceCount = await deps.prisma.deviceConfig.count({ where: { userId: sub.userId } });
+                    shouldClear = deviceCount > 0;
+                  }
+                  
+                  if (shouldClear) {
+                    const cleared = await deps.devices.clearAllDevices(sub.userId);
+                    if (cleared > 0) {
+                      logger.info(`worker: cleared ${cleared} devices for expired sub=${sub.id}`);
+                    }
                   }
                 } catch (e: any) {
                   logger.warn(`worker: failed to clear devices for sub=${sub.id}: ${e?.message ?? String(e)}`);
