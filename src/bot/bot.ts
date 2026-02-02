@@ -97,7 +97,6 @@ function cabinetKeyboard(deps: BotDeps): InlineKeyboard {
     .text("🔐 Моя подписка", "nav:sub")
     .text("💳 Оформить подписку", "nav:buy")
     .row()
-    .text("📱 Устройства", "nav:devices")
     .text("📄 Инструкция", "nav:guide")
     .row()
     .add(supportButton(deps, "🆘 Написать в поддержку"));
@@ -306,7 +305,7 @@ export function buildBot(deps: BotDeps): Bot {
       kb.text("🚀 Подключить VPN", "nav:buy").row();
     }
 
-    kb.text("📱 Устройства", "nav:devices").text("💳 Подписка", "nav:sub").row();
+    kb.text("💳 Подписка", "nav:sub").row();
     kb.text("🎁 Ввести промокод", "nav:promo").row();
     kb.text("👥 Мои друзья", "nav:friends").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
