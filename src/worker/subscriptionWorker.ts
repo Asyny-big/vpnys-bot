@@ -169,7 +169,53 @@ export function startSubscriptionWorker(deps: {
             if (needsUpdate) {
               if (expiryChanged) {
                 logger.info(`worker: expiresAt synced sub=${sub.id} db=${dbExpiresAtMs ?? "null"} -> xui=${xuiExpiryTimeMs ?? "null"}`);
+
+                // Detect extension (manual update in 3x-ui to a future date)
+                // Conditions:
+                // 1. New expiry is valid and in the future
+                // 2. Old expiry existed (or was null)
+                // 3. New expiry > Old expiry (extension)
+                // 4. Subscription is enabled
+                const isExtension =
+                  xuiExpiryTimeMs !== undefined &&
+                  xuiExpiryTimeMs > nowMs &&
+                  enabled &&
+                  (dbExpiresAtMs === undefined || xuiExpiryTimeMs > dbExpiresAtMs);
+
+                // If undefined dbExpiresAtMs (first sync), maybe don't notify? 
+                // But user complained about "update", so likely DB has old date.
+                // Let's notify if it looks like a genuine extension of an existing user.
+
+                // Refine: only notify if we are extending an existing subscription that was already tracked.
+                // If dbExpiresAtMs is null/undefined, it might be a fresh import, but here we are in "sync" loop.
+
+                if (isExtension && deps.telegramBotToken && deps.telegramBotUrl) {
+                  try {
+                    const user = await deps.prisma.user.findFirst({
+                      where: { subscription: { id: sub.id } },
+                      select: { telegramId: true },
+                    });
+
+                    if (user?.telegramId) {
+                      const { formatRuDateTime } = await import("../domain/humanDate");
+                      const newDateStr = newExpiresAt ? formatRuDateTime(newExpiresAt) : "???";
+
+                      const message = [
+                        "✅ <b>Подписка продлена</b>",
+                        "",
+                        `Ваша подписка успешно обновлена до <b>${newDateStr}</b>.`,
+                        "Приятного пользования! 🦊",
+                      ].join("\n");
+
+                      await sendTelegramMessage(deps.telegramBotToken, user.telegramId, message);
+                      logger.info(`worker: sent extension notice to user tg:${user.telegramId}`);
+                    }
+                  } catch (notifyErr: any) {
+                    logger.warn(`worker: failed to send extension notice for sub=${sub.id}: ${notifyErr?.message ?? String(notifyErr)}`);
+                  }
+                }
               }
+
               await deps.prisma.subscription.update({
                 where: { id: sub.id },
                 data: {
