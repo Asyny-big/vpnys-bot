@@ -68,14 +68,15 @@ export class DeviceService {
   }
 
   /**
-   * @deprecated Не использовать для автоматической регистрации при подключении!
+   * Автоматическая регистрация устройства при первом подключении.
    * 
-   * Register or update a device for a user.
-   * Returns existing device if fingerprint matches, or creates new one if slots available.
-   * Clears all devices if subscription just expired (was active, now inactive).
+   * Логика:
+   * 1. Если устройство уже существует (по fingerprint) → обновить lastSeenAt, разрешить
+   * 2. Если новое устройство и есть свободный слот → создать, разрешить
+   * 3. Если новое устройство и слота нет → отказать (LIMIT_REACHED)
    * 
-   * ⚠️ ВАЖНО: Этот метод НЕ должен вызываться при подключении VPN.
-   * Устройства создаются ТОЛЬКО через явное действие "Добавить устройство".
+   * ⚠️ ВАЖНО: fingerprint НЕ включает IP (IP меняется при VPN).
+   * Source of truth — БД.
    */
   async registerDevice(
     userId: string,

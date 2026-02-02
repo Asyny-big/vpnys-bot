@@ -228,14 +228,22 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // ❌ УДАЛЕНО: Автоматическая регистрация устройств при подключении.
-      // Устройства создаются ТОЛЬКО через явное действие "Добавить устройство".
-      // Логирование для отладки оставляем:
+      // ✅ Проверка/регистрация устройства при первом подключении
+      // IP НЕ участвует в fingerprint
       const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
-      detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
+      const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
 
-      // deviceError больше не используется
-      const deviceError: string | undefined = undefined;
+      let deviceError: string | undefined = undefined;
+      if (isActive && deviceInfo.fingerprint) {
+        const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
+          req.log.error({ err }, "Failed to register device in /connect/:token");
+          return { success: false, error: "Ошибка регистрации устройства", errorCode: "UNKNOWN" as const };
+        });
+
+        if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
+          deviceError = registerResult.error;
+        }
+      }
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
@@ -932,13 +940,37 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // ❌ УДАЛЕНО: Автоматическая регистрация устройств при подключении.
-      // ✅ Устройства создаются ТОЛЬКО через явное действие "Добавить устройство".
-      // Подключение VPN только проверяет:
-      // 1. Существование clientId (UUID подписки)
-      // 2. Активность подписки (isActive)
-      // Логирование для отладки:
-      detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
+      // ✅ Автоматическая регистрация устройств при первом подключении (без IP в fingerprint)
+      // Логика слотов:
+      // 1. Устройство существует → разрешить подключение
+      // 2. Новое устройство + слот есть → создать устройство + разрешить
+      // 3. Новое устройство + слота нет → 403, VPN НЕ работает
+      if (isActive) {
+        const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
+
+        if (deviceInfo.fingerprint) {
+          const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
+            req.log.error({ err }, "Failed to register device in /sub/:token");
+            return { success: false, error: "Ошибка регистрации устройства", errorCode: "UNKNOWN" as const };
+          });
+
+          // ❌ ЖЁСТКАЯ БЛОКИРОВКА: если лимит достигнут - VPN не работает
+          if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
+            // Возвращаем конфиг с сообщением об ошибке, но БЕЗ серверов
+            const built = buildSubscription(
+              { enabled: true, expiresAt: effectiveExpiresAt, limitReached: true, telegramBotUrl: deps.telegramBotUrl },
+              { primaryServer: null, mobileBypassUrls: [] },
+            );
+            for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
+            // 403 Forbidden - лимит устройств
+            await reply.code(403).send(built.body);
+            return;
+          }
+        }
+      } else {
+        // Просто логируем для неактивных подписок
+        detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
+      }
 
       const primaryServer = isActive
         ? await (async () => {
