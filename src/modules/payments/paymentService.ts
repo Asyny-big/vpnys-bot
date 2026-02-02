@@ -7,7 +7,7 @@ import { URL } from "node:url";
 import { PaymentProvider, PaymentStatus, PaymentType, SubscriptionStatus } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
-import { EXTRA_DEVICE_RUB } from "../../domain/pricing";
+import { calcDevicePricing, EXTRA_DEVICE_RUB, monthsByDaysCeil } from "../../domain/pricing";
 import { formatRuDateTime } from "../../domain/humanDate";
 import { formatRuDevices } from "../../domain/humanDevices";
 import { OfferNotAcceptedError, isOfferAccepted, safeYooKassaDescription } from "../../domain/offer";
@@ -77,7 +77,17 @@ export class PaymentService {
     const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
     const minDeviceLimit = isActiveSubscription ? currentDeviceLimit : 1;
     const selectedDeviceLimit = clampDeviceLimit(Math.max(minDeviceLimit, params.deviceLimit));
-    const totalRub = baseRub + (selectedDeviceLimit - 1) * EXTRA_DEVICE_RUB;
+
+    const computed = calcDevicePricing({
+      kind: "new_subscription",
+      basePlanRub: baseRub,
+      planDays: params.planDays,
+      selectedDevices: selectedDeviceLimit,
+      includedDevices: 1,
+      extraDeviceRubPer30Days: EXTRA_DEVICE_RUB,
+    });
+
+    const totalRub = computed.totalRub;
 
     return {
       currentDeviceLimit,
@@ -94,15 +104,46 @@ export class PaymentService {
     maxDeviceLimit: number;
     canAdd: boolean;
     priceRub: number;
+    daysRemaining: number;
+    monthsRemaining: number;
   }> {
     const user = await this.getUserOrThrow(params.telegramId);
     const subscription = await this.subscriptions.ensureForUser(user);
     const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
+
+    const effectiveUntil = (() => {
+      const a = subscription.expiresAt?.getTime() ?? 0;
+      const b = subscription.paidUntil?.getTime() ?? 0;
+      const ms = Math.max(a, b);
+      return ms > 0 ? new Date(ms) : undefined;
+    })();
+
+    const nowMs = Date.now();
+    const remainingMs = effectiveUntil ? effectiveUntil.getTime() - nowMs : 0;
+    // Не занижаем цену при неполных днях: считаем оставшиеся дни вверх.
+    const daysRemaining = remainingMs > 0 ? Math.ceil(remainingMs / (24 * 60 * 60 * 1000)) : 0;
+    const monthsRemaining = monthsByDaysCeil(daysRemaining);
+
+    // Докупка устройств разрешена только при активной подписке.
+    if (!subscription.enabled || !effectiveUntil || effectiveUntil.getTime() <= nowMs) {
+      throw new Error("Subscription is not active");
+    }
+
+    const computed = calcDevicePricing({
+      kind: "add_devices",
+      currentDeviceLimit,
+      newDeviceLimit: currentDeviceLimit + 1,
+      daysRemaining,
+      extraDeviceRubPer30Days: EXTRA_DEVICE_RUB,
+    });
+
     return {
       currentDeviceLimit,
       maxDeviceLimit: MAX_DEVICE_LIMIT,
       canAdd: currentDeviceLimit < MAX_DEVICE_LIMIT,
-      priceRub: EXTRA_DEVICE_RUB,
+      priceRub: computed.totalRub,
+      daysRemaining,
+      monthsRemaining,
     };
   }
 
@@ -415,6 +456,10 @@ export class PaymentService {
       throw new Error("Device limit reached");
     }
 
+    const quoted = await this.quoteDeviceSlot({ telegramId: params.telegramId });
+    if (!quoted.canAdd) throw new Error("Device limit reached");
+    if (!Number.isFinite(quoted.priceRub) || quoted.priceRub <= 0) throw new Error("Computed device slot price is invalid");
+
     if (params.provider === PaymentProvider.YOOKASSA) {
       if (!this.deps.yookassa) throw new Error("YooKassa is not configured");
 
@@ -426,14 +471,14 @@ export class PaymentService {
           type: PaymentType.DEVICE_SLOT,
           planDays: 0,
           deviceSlots: 1,
-          amountRub: EXTRA_DEVICE_RUB,
+          amountRub: quoted.priceRub,
           currency: "RUB",
           status: PaymentStatus.PENDING,
         },
       });
 
       const created = await this.deps.yookassa.createPayment({
-        amountRub: EXTRA_DEVICE_RUB,
+        amountRub: quoted.priceRub,
         description: "Дополнительное устройство (LisVPN)",
         returnUrl: this.buildYooKassaReturnUrl(payment.id),
         idempotenceKey: payment.id,
@@ -452,10 +497,7 @@ export class PaymentService {
     if (params.provider === PaymentProvider.CRYPTOBOT) {
       if (!this.deps.cryptobot) throw new Error("CryptoBot is not configured");
 
-      const deviceSlotRubRaw = this.deps.cryptobotDeviceSlotRub ?? EXTRA_DEVICE_RUB;
-      if (!Number.isFinite(deviceSlotRubRaw) || deviceSlotRubRaw <= 0) throw new Error("CRYPTOBOT_DEVICE_SLOT_RUB is not configured");
-      const deviceSlotRub = Math.trunc(deviceSlotRubRaw);
-      const amount = this.computeUsdtAmountFromRub(deviceSlotRub);
+      const amount = this.computeUsdtAmountFromRub(quoted.priceRub);
 
       const payment = await this.prisma.payment.create({
         data: {
@@ -465,7 +507,7 @@ export class PaymentService {
           type: PaymentType.DEVICE_SLOT,
           planDays: 0,
           deviceSlots: 1,
-          amountRub: deviceSlotRub,
+          amountRub: quoted.priceRub,
           currency: this.deps.cryptobotAsset,
           status: PaymentStatus.PENDING,
         },

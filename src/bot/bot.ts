@@ -524,7 +524,11 @@ export function buildBot(deps: BotDeps): Bot {
     let quoted: any;
     try {
       quoted = await deps.payments.quoteDeviceSlot({ telegramId });
-    } catch {
+    } catch (e: any) {
+      if (e?.message === "Subscription is not active") {
+        await replyOrEdit(ctx, "Докупка устройства доступна только при активной подписке. Сначала оформи/продли подписку.", { reply_markup: backToCabinetKeyboard(deps) });
+        return;
+      }
       await replyOrEdit(ctx, "Нажми /start — и я запущу тебе ЛисVPN 🦊", { reply_markup: MAIN_KEYBOARD });
       return;
     }
@@ -786,7 +790,7 @@ export function buildBot(deps: BotDeps): Bot {
 
     // Add "Buy Slot" button if at limit
     if (limits.availableSlots === 0) {
-      keyboard.text("💳 Купить дополнительный слот (50₽)", "devices:buy_slot").row();
+      keyboard.text("💳 Купить дополнительный слот", "devices:buy_slot").row();
     }
 
     keyboard.text("🔙 Назад в меню", "menu:main");
@@ -794,10 +798,20 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
   };
 
-  const showBuyDeviceSlotMenu = async (ctx: any, userId: string): Promise<void> => {
+  const showBuyDeviceSlotMenu = async (ctx: any, telegramId: string): Promise<void> => {
+    let quoted: any;
+    try {
+      quoted = await deps.payments.quoteDeviceSlot({ telegramId });
+    } catch {
+      await replyOrEdit(ctx, "Докупка устройства доступна только при активной подписке.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
     const text = [
       `💳 <b>Дополнительное устройство</b>\n`,
-      `Стоимость: <b>50 ₽</b>`,
+      `Стоимость: <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`,
+      ``,
+      `Цена считается по оставшемуся сроку подписки: <b>${quoted.monthsRemaining} × 30 дней</b>.`,
       ``,
       `После оплаты вы сможете подключить ещё одно устройство к вашей подписке.`,
       ``,
@@ -986,7 +1000,7 @@ export function buildBot(deps: BotDeps): Bot {
       }
     } else if (action === "buy_slot") {
       // Navigate to buy slot (will implement next)
-      await showBuyDeviceSlotMenu(ctx, required.user.id);
+      await showBuyDeviceSlotMenu(ctx, required.user.telegramId);
     }
   });
 
@@ -1378,6 +1392,10 @@ export function buildBot(deps: BotDeps): Bot {
         { parse_mode: "HTML", reply_markup: keyboard }
       );
     } catch (err: any) {
+      if (err?.message === "Subscription is not active") {
+        await replyOrEdit(ctx, "Докупка устройства доступна только при активной подписке. Сначала оформи/продли подписку.", { reply_markup: backToCabinetKeyboard(deps) });
+        return;
+      }
       await replyOrEdit(ctx, 
         `❌ Ошибка создания счёта: ${err?.message ?? "Неизвестная ошибка"}`, 
         { reply_markup: backToCabinetKeyboard(deps) }
