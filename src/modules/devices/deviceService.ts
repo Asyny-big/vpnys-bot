@@ -32,19 +32,21 @@ export class DeviceService {
 
   /**
    * Calculate device limits for a user.
+   * Source of truth: subscription.deviceLimit (обновляется через /addslot и покупки)
    */
   async getDeviceLimits(userId: string): Promise<DeviceLimits> {
-    let user: { extraDeviceSlots: number } | null = null;
+    // Читаем актуальный лимит из подписки (source of truth)
+    let subscription: { deviceLimit: number } | null = null;
     try {
-      user = await this.prisma.user.findUnique({
-        where: { id: userId },
-        select: { extraDeviceSlots: true },
+      subscription = await this.prisma.subscription.findUnique({
+        where: { userId },
+        select: { deviceLimit: true },
       });
     } catch {
-      // Ignore error (e.g. column not found) and use default limits
+      // Ignore error (e.g. column not found)
     }
 
-    // Ensure we don't crash on count if table doesn't exist
+    // Считаем текущее количество устройств
     let currentDevices = 0;
     try {
       currentDevices = await this.prisma.deviceConfig.count({
@@ -54,9 +56,13 @@ export class DeviceService {
       // Ignore error (e.g. table not found)
     }
 
+    // deviceLimit из подписки - это source of truth
+    // Если подписки нет, используем базовый лимит 1
+    const totalLimit = subscription?.deviceLimit ?? 1;
+    
+    // extraSlots вычисляем как разницу от базового лимита (для отображения)
     const baseLimit = 1;
-    const extraSlots = user?.extraDeviceSlots ?? 0;
-    const totalLimit = baseLimit + extraSlots;
+    const extraSlots = Math.max(0, totalLimit - baseLimit);
 
     return {
       baseLimit,
