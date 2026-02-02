@@ -2,19 +2,19 @@
   "NL": {
     "name": "[OpenRay] 🇳🇱 NL-563",
     "config": "vless://a44e0875-210f-4941-9062-89b6361a14c6@80.85.245.242:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=i5a8i2AWUSMZ-rYA6hGBRCBBoe7W5ah33SCdF5JkMk4&sid=8bcfe256cf216fd8&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-563",
-    "bandwidth": 43.05,
-    "ttfb": 0.21468
+    "bandwidth": 17.77,
+    "ttfb": 0.523075
   },
   "DE": {
-    "name": "🇩🇪 Germany [SNI-RU] vk.com",
-    "config": "vless://044818b4-a05f-5813-b8f5-63e1e4615827@194.107.126.214:8443?encryption=none&fp=chrome&mode=auto&path=%2F&pbk=JOJ9C3bZafgM5-cMNWQQIgsU7rGSMhXOz89852K-EwQ&security=reality&sid=c39392324d01&sni=vk.com&type=xhttp#%F0%9F%87%A9%F0%9F%87%AA%20Germany%20%5BSNI-RU%5D%20vk.com",
-    "bandwidth": 46.12,
-    "ttfb": 0.350264
+    "name": "[OpenRay] 🇩🇪 DE-5804",
+    "config": "vless://63f92f3c-447c-4283-80b9-0af8e164cdad@5.45.109.158:22955?encryption=none&security=reality&sni=one-piece.com&fp=chrome&pbk=9Mt_Y8J_qDb1khlieWnhDSAq-kGtLHw6aOKgkAzOMms&sid=6ba85179e30d4fc2&type=grpc&serviceName=grpc&packetEncoding=xudp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-5804",
+    "bandwidth": 12.59,
+    "ttfb": 0.446701
   },
   "FI": {
-    "name": "🏴‍☠️ @TeleProxyTele",
-    "config": "vless://e4fc4761-154f-490e-bbaa-b4fa193f1073@45.148.31.0:15855?path=%2F&security=none&encryption=none&type=ws#%F0%9F%8F%B4%E2%80%8D%E2%98%A0%EF%B8%8F%20%40TeleProxyTele",
-    "bandwidth": 11.64,
-    "ttfb": 0.394675
+    "name": "[🇫🇮] [vl-no-ra] [260131-193129.810]",
+    "config": "vless://b16e18a9-6363-4af5-9144-7fba011c1f25@65.109.219.76:19854?encryption=none&type=raw&headerType=none&security=none#[🇫🇮] [vl-no-ra] [260131-193129.810]",
+    "bandwidth": 0,
+    "ttfb": 0.199147
   }
 }
