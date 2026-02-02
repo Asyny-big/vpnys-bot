@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 import type { ThreeXUiService } from "../integrations/threeXui/threeXuiService";
+import type { DeviceService } from "../modules/devices/deviceService";
 import { SubscriptionStatus } from "../db/values";
 import { sendTelegramMessage } from "../utils/telegram";
 
@@ -28,6 +29,7 @@ async function runWithConcurrency<T>(
 export function startSubscriptionWorker(deps: {
   prisma: PrismaClient;
   xui: ThreeXUiService;
+  devices?: DeviceService;
   intervalSeconds: number;
   logger?: Logger;
   telegramBotToken?: string;
@@ -65,6 +67,7 @@ export function startSubscriptionWorker(deps: {
           orderBy: { id: "asc" },
           select: {
             id: true,
+            userId: true,
             xuiInboundId: true,
             xuiClientUuid: true,
             xuiSubscriptionId: true,
@@ -72,6 +75,7 @@ export function startSubscriptionWorker(deps: {
             expiresAt: true,
             paidUntil: true,
             enabled: true,
+            status: true,
             user: { select: { telegramId: true } },
           },
           take: batchSize,
@@ -150,11 +154,25 @@ export function startSubscriptionWorker(deps: {
             const expired = xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs > 0 && xuiExpiryTimeMs <= nowMs;
 
             if (expired) {
-              // Only send notification if subscription was previously enabled (first-time expiration)
+              // Detect first-time expiration (transition from ACTIVE/DISABLED to EXPIRED)
+              const isFirstExpiration = sub.status !== SubscriptionStatus.EXPIRED;
               const wasEnabled = enabled;
 
               if (enabled) {
                 await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
+              }
+
+              // Clear all devices ONLY on first expiration (prevents using old devices with new lower-limit subscription)
+              // This is idempotent but we check isFirstExpiration to avoid unnecessary DB queries on every tick
+              if (isFirstExpiration && deps.devices) {
+                try {
+                  const cleared = await deps.devices.clearAllDevices(sub.userId);
+                  if (cleared > 0) {
+                    logger.info(`worker: cleared ${cleared} devices for expired sub=${sub.id}`);
+                  }
+                } catch (e: any) {
+                  logger.warn(`worker: failed to clear devices for sub=${sub.id}: ${e?.message ?? String(e)}`);
+                }
               }
 
               if (expiryChanged) {

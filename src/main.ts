@@ -124,6 +124,7 @@ async function main(): Promise<void> {
   startSubscriptionWorker({
     prisma,
     xui,
+    devices,
     intervalSeconds: env.workerIntervalSeconds,
     logger: app.log,
     telegramBotToken: env.telegramBotToken,
