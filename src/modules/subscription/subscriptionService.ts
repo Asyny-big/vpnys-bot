@@ -80,26 +80,10 @@ export class SubscriptionService {
       return { subscription: updated, expiresAt: repaired.expiresAt, enabled: repaired.enabled };
     }
 
-    let expiresAt = client.expiresAt;
-    let enabled = client.enabled;
-
-    const now = new Date();
-    const paidUntil = subscription.paidUntil;
-    if (paidUntil && paidUntil.getTime() > now.getTime()) {
-      const needsExtend = !expiresAt || expiresAt.getTime() < paidUntil.getTime();
-      if (needsExtend) {
-        await this.xui.setExpiryAndEnable({
-          inboundId: subscription.xuiInboundId,
-          uuid: subscription.xuiClientUuid,
-          subscriptionId: subscription.xuiSubscriptionId,
-          expiresAt: paidUntil,
-          enabled: true,
-          deviceLimit: subscription.deviceLimit,
-        });
-        expiresAt = paidUntil;
-        enabled = true;
-      }
-    }
+    // 3x-ui is the source of truth for expiresAt.
+    // We only READ from 3x-ui, never push expiresAt back.
+    const expiresAt = client.expiresAt;
+    const enabled = client.enabled;
 
     // ✅ ИСПРАВЛЕНО: subscription.deviceLimit - это МАКСИМУМ слотов, НЕ количество подключенных устройств.
     // limitIp в 3x-ui должен соответствовать deviceLimit (максимальному количеству устройств).

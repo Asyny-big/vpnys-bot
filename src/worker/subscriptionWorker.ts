@@ -57,7 +57,6 @@ export function startSubscriptionWorker(deps: {
               { enabled: true },
               { expiresAt: { lte: now } },
               { expiresAt: null },
-              { paidUntil: { gt: now } },
             ],
           },
           ...(cursorId ? { cursor: { id: cursorId }, skip: 1 } : {}),
@@ -68,7 +67,6 @@ export function startSubscriptionWorker(deps: {
             xuiClientUuid: true,
             xuiSubscriptionId: true,
             deviceLimit: true,
-            paidUntil: true,
           },
           take: batchSize,
         });
@@ -97,31 +95,12 @@ export function startSubscriptionWorker(deps: {
               return;
             }
 
-            let expiresAt = client.expiresAt;
-            let enabled = client.enabled;
+            // 3x-ui is the source of truth for expiresAt.
+            // We only READ from 3x-ui and WRITE to DB. Never push expiresAt to 3x-ui from worker.
+            const expiresAt = client.expiresAt;
+            const enabled = client.enabled;
 
-            if (sub.paidUntil && sub.paidUntil.getTime() > now.getTime()) {
-              const needsExtend = !expiresAt || expiresAt.getTime() < sub.paidUntil.getTime();
-              if (needsExtend) {
-                await deps.xui.setExpiryAndEnable({
-                  inboundId: sub.xuiInboundId,
-                  uuid: sub.xuiClientUuid,
-                  subscriptionId: sub.xuiSubscriptionId,
-                  expiresAt: sub.paidUntil,
-                  enabled: true,
-                  deviceLimit: sub.deviceLimit,
-                });
-                expiresAt = sub.paidUntil;
-                enabled = true;
-              }
-            }
-
-            const effectiveExpiresAt =
-              expiresAt && sub.paidUntil
-                ? (expiresAt.getTime() > sub.paidUntil.getTime() ? expiresAt : sub.paidUntil)
-                : (expiresAt ?? sub.paidUntil ?? undefined);
-
-            const expired = !!effectiveExpiresAt && effectiveExpiresAt.getTime() <= now.getTime();
+            const expired = !!expiresAt && expiresAt.getTime() <= now.getTime();
 
             if (expired) {
               // Only send notification if subscription was previously enabled (first-time expiration)
@@ -135,7 +114,7 @@ export function startSubscriptionWorker(deps: {
                 data: {
                   enabled: false,
                   status: SubscriptionStatus.EXPIRED,
-                  expiresAt: effectiveExpiresAt ?? null,
+                  expiresAt: expiresAt ?? null,
                   lastSyncedAt: new Date(),
                 },
               });
@@ -174,7 +153,7 @@ export function startSubscriptionWorker(deps: {
               data: {
                 enabled,
                 status: enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
-                expiresAt: effectiveExpiresAt ?? null,
+                expiresAt: expiresAt ?? null,
                 lastSyncedAt: new Date(),
               },
             });
