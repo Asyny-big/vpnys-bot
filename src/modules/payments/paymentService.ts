@@ -4,7 +4,7 @@ import { YooKassaClient } from "../../integrations/yookassa/yooKassaClient";
 import { CryptoBotClient } from "../../integrations/cryptobot/cryptoBotClient";
 import { randomUUID } from "node:crypto";
 import { URL } from "node:url";
-import { PaymentProvider, PaymentStatus, PaymentType } from "../../db/values";
+import { PaymentProvider, PaymentStatus, PaymentType, SubscriptionStatus } from "../../db/values";
 import { addDays } from "../../utils/time";
 import { MAX_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 import { EXTRA_DEVICE_RUB } from "../../domain/pricing";
@@ -71,8 +71,12 @@ export class PaymentService {
 
     const baseRub = this.getPlanRubOrThrow(params.planDays);
 
+    // For active subscriptions: user cannot decrease deviceLimit (protect existing devices)
+    // For expired/disabled subscriptions: user can choose any deviceLimit from 1 to MAX
+    const isActiveSubscription = subscription.status === SubscriptionStatus.ACTIVE;
     const currentDeviceLimit = clampDeviceLimit(subscription.deviceLimit);
-    const selectedDeviceLimit = clampDeviceLimit(Math.max(currentDeviceLimit, params.deviceLimit));
+    const minDeviceLimit = isActiveSubscription ? currentDeviceLimit : 1;
+    const selectedDeviceLimit = clampDeviceLimit(Math.max(minDeviceLimit, params.deviceLimit));
     const totalRub = baseRub + (selectedDeviceLimit - 1) * EXTRA_DEVICE_RUB;
 
     return {
