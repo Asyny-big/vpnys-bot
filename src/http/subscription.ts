@@ -940,7 +940,7 @@ export async function registerSubscriptionRoutes(
       // Логика слотов:
       // 1. Устройство существует (по fingerprint без IP) → разрешить подключение
       // 2. Новое устройство + слот есть → создать устройство + разрешить
-      // 3. Новое устройство + слота нет → 403, VPN НЕ работает
+      // 3. Новое устройство + слота нет → пустая подписка без серверов + уведомление в приложении
       if (isActive) {
         const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
@@ -950,18 +950,21 @@ export async function registerSubscriptionRoutes(
             return { success: false, error: "Ошибка регистрации устройства", errorCode: "UNKNOWN" as const };
           });
 
-          // ❌ ЖЁСТКАЯ БЛОКИРОВКА: если лимит достигнут - VPN не работает
+          // ⚠️ ЛИМИТ ДОСТИГНУТ: возвращаем пустую подписку с уведомлением
+          // Вместо 403 (который вызывает ошибку в клиентах) возвращаем 200 с пустым body
+          // Уведомление отображается через заголовок "announce" в Happ/Hiddify
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-            // Возвращаем 403 с простым error-body БЕЗ серверов
-            // Не вызываем buildSubscription - клиент не должен получить никакой конфиг
-            reply.header("Content-Type", "text/plain; charset=utf-8");
-            reply.header("Cache-Control", "no-store");
-            // Сообщение для Happ/клиента - будет показано как ошибка
-            await reply.code(403).send(
-              "# DEVICE_LIMIT_REACHED\n" +
-              "# Превышен лимит устройств.\n" +
-              "# Удалите лишние устройства в Telegram-боте или купите дополнительный слот.\n"
+            const built = buildSubscription(
+              { 
+                enabled: true, 
+                expiresAt: effectiveExpiresAt, 
+                telegramBotUrl: deps.telegramBotUrl,
+                limitReached: true, // Включает announce с сообщением о лимите
+              },
+              { primaryServer: null, fastServerUrls: [], mobileBypassUrls: [] },
             );
+            for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
+            await reply.code(200).send(built.body);
             return;
           }
         }
