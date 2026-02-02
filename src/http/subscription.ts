@@ -952,14 +952,16 @@ export async function registerSubscriptionRoutes(
 
           // ❌ ЖЁСТКАЯ БЛОКИРОВКА: если лимит достигнут - VPN не работает
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-            // Возвращаем конфиг с сообщением об ошибке, но БЕЗ серверов
-            const built = buildSubscription(
-              { enabled: true, expiresAt: effectiveExpiresAt, limitReached: true, telegramBotUrl: deps.telegramBotUrl },
-              { primaryServer: null, mobileBypassUrls: [] },
+            // Возвращаем 403 с простым error-body БЕЗ серверов
+            // Не вызываем buildSubscription - клиент не должен получить никакой конфиг
+            reply.header("Content-Type", "text/plain; charset=utf-8");
+            reply.header("Cache-Control", "no-store");
+            // Сообщение для Happ/клиента - будет показано как ошибка
+            await reply.code(403).send(
+              "# DEVICE_LIMIT_REACHED\n" +
+              "# Превышен лимит устройств.\n" +
+              "# Удалите лишние устройства в Telegram-боте или купите дополнительный слот.\n"
             );
-            for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
-            // 403 Forbidden - лимит устройств
-            await reply.code(403).send(built.body);
             return;
           }
         }
