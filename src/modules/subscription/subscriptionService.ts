@@ -107,11 +107,19 @@ export class SubscriptionService {
           ? SubscriptionStatus.ACTIVE
           : SubscriptionStatus.DISABLED;
 
+    // Sync paidUntil: if 3x-ui date is less than paidUntil, adjust paidUntil to match
+    // This ensures 3x-ui is the absolute source of truth for subscription dates
+    const dbPaidUntilMs = subscription.paidUntil ? subscription.paidUntil.getTime() : undefined;
+    const newPaidUntil = (dbPaidUntilMs !== undefined && xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs < dbPaidUntilMs)
+      ? newExpiresAt
+      : undefined; // undefined = no change
+
     const updated = await this.prisma.subscription.update({
       where: { id: subscription.id },
       data: {
         enabled,
         expiresAt: newExpiresAt,
+        ...(newPaidUntil !== undefined ? { paidUntil: newPaidUntil } : {}),
         status,
         lastSyncedAt: new Date(),
       },

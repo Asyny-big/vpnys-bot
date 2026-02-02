@@ -70,6 +70,7 @@ export function startSubscriptionWorker(deps: {
             xuiSubscriptionId: true,
             deviceLimit: true,
             expiresAt: true,
+            paidUntil: true,
             enabled: true,
             user: { select: { telegramId: true } },
           },
@@ -160,12 +161,19 @@ export function startSubscriptionWorker(deps: {
                 logger.info(`worker: expiresAt changed (expired) sub=${sub.id} db=${dbExpiresAtMs ?? "null"} xui=${xuiExpiryTimeMs ?? "null"}`);
               }
 
+              // Sync paidUntil: if 3x-ui date is less than paidUntil, adjust paidUntil to match
+              const dbPaidUntilMs = sub.paidUntil ? sub.paidUntil.getTime() : undefined;
+              const newPaidUntil = (dbPaidUntilMs !== undefined && xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs < dbPaidUntilMs)
+                ? newExpiresAt
+                : undefined; // undefined = no change
+
               await deps.prisma.subscription.update({
                 where: { id: sub.id },
                 data: {
                   enabled: false,
                   status: SubscriptionStatus.EXPIRED,
                   expiresAt: newExpiresAt,
+                  ...(newPaidUntil !== undefined ? { paidUntil: newPaidUntil } : {}),
                   lastSyncedAt: new Date(),
                 },
               });
@@ -251,12 +259,19 @@ export function startSubscriptionWorker(deps: {
                 }
               }
 
+              // Sync paidUntil: if 3x-ui date is less than paidUntil, adjust paidUntil to match
+              const dbPaidUntilMs = sub.paidUntil ? sub.paidUntil.getTime() : undefined;
+              const newPaidUntil = (dbPaidUntilMs !== undefined && xuiExpiryTimeMs !== undefined && xuiExpiryTimeMs < dbPaidUntilMs)
+                ? newExpiresAt
+                : undefined; // undefined = no change
+
               await deps.prisma.subscription.update({
                 where: { id: sub.id },
                 data: {
                   enabled,
                   status: enabled ? SubscriptionStatus.ACTIVE : SubscriptionStatus.DISABLED,
                   expiresAt: newExpiresAt,
+                  ...(newPaidUntil !== undefined ? { paidUntil: newPaidUntil } : {}),
                   lastSyncedAt: new Date(),
                 },
               });
