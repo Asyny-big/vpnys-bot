@@ -43,8 +43,8 @@ export function startSubscriptionWorker(deps: {
       const now = new Date();
       const nowMs = now.getTime();
 
-      // Cache: uuid -> { expiryTime (ms), enabled }
-      const inboundClientMaps = new Map<number, Map<string, { expiryTime?: number; enabled: boolean }>>();
+      // Cache: uuid -> { expiryTime (ms), enabled, email, uuid, subId }
+      const inboundClientMaps = new Map<number, Map<string, { expiryTime?: number; enabled: boolean; uuid: string; subId: string; email: string }>>();
 
       const batchSize = 500;
       const maxBatchesPerTick = 10;
@@ -71,6 +71,7 @@ export function startSubscriptionWorker(deps: {
             deviceLimit: true,
             expiresAt: true,
             enabled: true,
+            user: { select: { telegramId: true } },
           },
           take: batchSize,
         });
@@ -83,9 +84,16 @@ export function startSubscriptionWorker(deps: {
         await runWithConcurrency(inboundIds, 2, async (inboundId) => {
           if (inboundClientMaps.has(inboundId)) return;
           const clients = await deps.xui.listClients(inboundId);
-          const map = new Map<string, { expiryTime?: number; enabled: boolean }>();
+          // Map now stores more details for fallback
+          const map = new Map<string, { expiryTime?: number; enabled: boolean; uuid: string; subId: string; email: string }>();
           for (const client of clients) {
-            map.set(client.uuid, { expiryTime: client.expiryTime, enabled: client.enabled });
+            map.set(client.uuid, {
+              expiryTime: client.expiryTime,
+              enabled: client.enabled,
+              uuid: client.uuid,
+              subId: client.subscriptionId,
+              email: client.email
+            });
           }
           inboundClientMaps.set(inboundId, map);
         });
@@ -93,11 +101,33 @@ export function startSubscriptionWorker(deps: {
         await runWithConcurrency(candidates, 10, async (sub) => {
           try {
             const map = inboundClientMaps.get(sub.xuiInboundId);
-            const client = map?.get(sub.xuiClientUuid);
-            if (!client) {
-              logger.warn(`worker: client missing in 3x-ui uuid=${sub.xuiClientUuid}`);
-              return;
+            let client = map?.get(sub.xuiClientUuid);
+
+            // Fallback: if not found by UUID, try to find by email (to repair broken links/re-created clients)
+            if (!client && sub.user?.telegramId) {
+              const email = `tg:${sub.user.telegramId}`;
+              // Brute-force find by email in the map
+              if (map) {
+                for (const c of map.values()) {
+                  if (c.email === email) {
+                    client = c;
+                    logger.info(`worker: repaired client link sub=${sub.id} (uuid changed: ${sub.xuiClientUuid} -> ${client.uuid})`);
+
+                    // Update DB with new UUID and SubscriptionID from 3x-ui
+                    await deps.prisma.subscription.update({
+                      where: { id: sub.id },
+                      data: {
+                        xuiClientUuid: client.uuid,
+                        xuiSubscriptionId: client.subId,
+                        lastSyncedAt: new Date(),
+                      }
+                    });
+                    break;
+                  }
+                }
+              }
             }
+
 
             // 3x-ui is the source of truth for expiresAt.
             // We only READ expiryTime (ms) from 3x-ui and WRITE to DB. Never push expiresAt to 3x-ui from worker.

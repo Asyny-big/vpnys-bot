@@ -41,7 +41,7 @@ export type VlessRealityTemplate = Readonly<{
 }>;
 
 export class ThreeXUiService {
-  constructor(private readonly api: ThreeXUiApiClient) {}
+  constructor(private readonly api: ThreeXUiApiClient) { }
 
   private readonly vlessRealityTemplateCache = new Map<number, { fetchedAt: number; value: VlessRealityTemplate }>();
   private readonly vlessRealityTemplateTtlMs = 10 * 60 * 1000;
@@ -223,7 +223,9 @@ export class ThreeXUiService {
     const inbound = await this.getInboundOrThrow(inboundId);
     const clients = this.parseClients(inbound.settings);
     return clients.map((client) => {
-      const expiryTime = Number.isFinite(client.expiryTime) && client.expiryTime > 0 ? Number(client.expiryTime) : undefined;
+      const rawExpiry = Number(client.expiryTime);
+      const expiryTime = Number.isFinite(rawExpiry) && rawExpiry > 0 ? rawExpiry : undefined;
+      const rawLimitIp = Number(client.limitIp);
       return {
         uuid: String(client.id),
         subscriptionId: String(client.subId ?? ""),
@@ -231,7 +233,7 @@ export class ThreeXUiService {
         expiresAt: expiryTime !== undefined ? new Date(expiryTime) : undefined,
         expiryTime,
         enabled: client.enable !== false,
-        limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
+        limitIp: Number.isFinite(rawLimitIp) ? rawLimitIp : undefined,
       };
     });
   }
