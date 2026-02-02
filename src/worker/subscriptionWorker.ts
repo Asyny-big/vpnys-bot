@@ -129,6 +129,11 @@ export function startSubscriptionWorker(deps: {
             }
 
 
+            if (!client) {
+              logger.warn(`worker: client missing in 3x-ui uuid=${sub.xuiClientUuid} and email lookup failed`);
+              return;
+            }
+
             // 3x-ui is the source of truth for expiresAt.
             // We only READ expiryTime (ms) from 3x-ui and WRITE to DB. Never push expiresAt to 3x-ui from worker.
             const xuiExpiryTimeMs = client.expiryTime; // number | undefined (ms)
