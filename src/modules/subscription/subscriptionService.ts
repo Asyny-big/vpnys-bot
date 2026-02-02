@@ -101,6 +101,9 @@ export class SubscriptionService {
       }
     }
 
+    // ✅ ИСПРАВЛЕНО: subscription.deviceLimit - это МАКСИМУМ слотов, НЕ количество подключенных устройств.
+    // limitIp в 3x-ui должен соответствовать deviceLimit (максимальному количеству устройств).
+    // Реальные устройства хранятся в таблице DeviceConfig и управляются через deviceService.
     if (typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
       await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { deviceLimit: subscription.deviceLimit });
     }

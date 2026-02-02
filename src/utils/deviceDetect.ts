@@ -158,7 +158,9 @@ export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: str
 /**
  * Generate device fingerprint from available data.
  * WARNING: Not 100% reliable - same device can have different fingerprints
- * (e.g., different browsers, IP changes). Use only for soft limits, not security.
+ * (e.g., different browsers). Use only for soft limits, not security.
+ * 
+ * ВАЖНО: IP НЕ используется в fingerprint, т.к. IP меняется при подключении VPN.
  */
 function generateFingerprint(data: {
   ua: string;
@@ -170,7 +172,7 @@ function generateFingerprint(data: {
     mobile?: string;
   };
 }): string {
-  // Combine available signals
+  // Combine available signals (БЕЗ IP - IP меняется при VPN)
   const parts: string[] = [
     data.ua || "unknown",
     data.hints.model || "",
@@ -179,14 +181,8 @@ function generateFingerprint(data: {
     data.hints.mobile || "",
   ];
 
-  // Add partial IP (first 2 octets for IPv4, first 2 segments for IPv6)
-  // This helps distinguish devices but tolerates dynamic IPs
-  if (data.ip) {
-    const ipPart = data.ip.includes(":")
-      ? data.ip.split(":").slice(0, 2).join(":") // IPv6
-      : data.ip.split(".").slice(0, 2).join("."); // IPv4
-    parts.push(ipPart);
-  }
+  // НЕ добавляем IP - при активном VPN IP постоянно меняется,
+  // что приводит к регистрации одного физического устройства как нескольких.
 
   const combined = parts.join("|");
   return createHash("sha256").update(combined).digest("hex").slice(0, 16);

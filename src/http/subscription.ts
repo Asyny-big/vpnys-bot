@@ -228,21 +228,14 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // Register or update device (but don't block page load on errors)
+      // ❌ УДАЛЕНО: Автоматическая регистрация устройств при подключении.
+      // Устройства создаются ТОЛЬКО через явное действие "Добавить устройство".
+      // Логирование для отладки оставляем:
       const clientIp = req.headers["x-forwarded-for"]?.toString().split(",")?.[0]?.trim() ?? req.ip;
-      const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
+      detectAndLogDevice(req.headers as Record<string, string | undefined>, `/connect/${token}`, clientIp);
 
-      let deviceError: string | undefined;
-      if (deviceInfo.fingerprint) {
-        const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
-          req.log.error({ err }, "Failed to register device");
-          return { success: false, error: "Ошибка регистрации устройства" };
-        });
-
-        if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-          deviceError = registerResult.error;
-        }
-      }
+      // deviceError больше не используется
+      const deviceError: string | undefined = undefined;
 
       const userLabel = `user_${row.user.telegramId}`;
       const expiresLabel = effectiveExpiresAt ? formatDateRu(effectiveExpiresAt) : "—";
@@ -939,28 +932,13 @@ export async function registerSubscriptionRoutes(
 
       const isActive = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > nowMs && state.enabled;
 
-      // Check device limit and register/block device
-      if (isActive) {
-        const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
-
-        if (deviceInfo.fingerprint) {
-          const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
-            req.log.error({ err }, "Failed to register device in /sub/:token");
-            return { success: false, error: "Ошибка регистрации устройства" };
-          });
-
-          // If device limit reached, block connection with specific message
-          if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
-            const built = buildSubscription(
-              { enabled: true, expiresAt: effectiveExpiresAt, limitReached: true, telegramBotUrl: deps.telegramBotUrl },
-              { primaryServer: null, mobileBypassUrls: [] },
-            );
-            for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
-            await reply.code(200).send(built.body);
-            return;
-          }
-        }
-      }
+      // ❌ УДАЛЕНО: Автоматическая регистрация устройств при подключении.
+      // ✅ Устройства создаются ТОЛЬКО через явное действие "Добавить устройство".
+      // Подключение VPN только проверяет:
+      // 1. Существование clientId (UUID подписки)
+      // 2. Активность подписки (isActive)
+      // Логирование для отладки:
+      detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
       const primaryServer = isActive
         ? await (async () => {

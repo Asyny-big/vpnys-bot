@@ -42,7 +42,8 @@ async function main(): Promise<void> {
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
   const bans = new BanService(prisma);
   const antiAbuse = new AntiAbuseService(prisma);
-  const devices = new DeviceService(prisma);
+  // ✅ Передаем xui и xuiInboundId для синхронизации устройств с 3x-ui
+  const devices = new DeviceService(prisma, xui, env.xuiInboundId);
   const referrals = new ReferralService(prisma, subscriptions, bans, antiAbuse);
   const onboarding = new OnboardingService(prisma, subscriptions, bans, antiAbuse, referrals, env.backendPublicUrl, { offerVersion: env.offerVersion });
 

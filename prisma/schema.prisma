@@ -165,8 +165,11 @@ model DeviceConfig {
   userId       String
   user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   
-  // Device fingerprint (hash of UA + Client Hints + partial IP).
+  // Device fingerprint (hash of UA + Client Hints, БЕЗ IP).
   fingerprint  String
+  
+  // VLESS client UUID in 3x-ui (each device has its own client).
+  clientId     String?   @unique
   
   // Auto-generated or user-provided device name.
   deviceName   String
