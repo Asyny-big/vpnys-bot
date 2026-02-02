@@ -12,6 +12,8 @@ type Env = Readonly<{
   telegramBotToken: string;
   // Public bot URL shown too users in subscription messages (e.g. when expired).
   telegramBotUrl: string;
+  // Reusable Telegram file_id for the bot's brand image (photo).
+  botImageFileId?: string;
   adminUsername?: string;
   adminUserIds: ReadonlySet<string>;
 
@@ -163,6 +165,7 @@ export function loadEnv(): Env {
   const cryptobotApiToken = optional("CRYPTOBOT_API_TOKEN");
   const paymentsReturnUrlRaw = optional("PAYMENTS_RETURN_URL");
   const paymentsReturnUrl = paymentsReturnUrlRaw ? ensureUrl("PAYMENTS_RETURN_URL", paymentsReturnUrlRaw) : undefined;
+  const botImageFileId = optional("BOT_IMAGE_FILE_ID")?.trim() || undefined;
 
   const plan30Rub = requirePositiveInt("PLAN_30_RUB");
   const plan90Rub = requirePositiveInt("PLAN_90_RUB");
@@ -203,6 +206,7 @@ export function loadEnv(): Env {
     databaseUrl,
     telegramBotToken: required("TELEGRAM_BOT_TOKEN"),
     telegramBotUrl: ensureUrl("TELEGRAM_BOT_URL", required("TELEGRAM_BOT_URL")),
+    botImageFileId,
     adminUsername: optional("ADMIN_USERNAME"),
     adminUserIds: parseIdSet(optional("ADMIN_USER_IDS") ?? optional("ADMIN_IDS")),
 

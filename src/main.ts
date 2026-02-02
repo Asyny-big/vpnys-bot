@@ -93,6 +93,7 @@ async function main(): Promise<void> {
     backendPublicUrl: env.backendPublicUrl,
     telegramBotUrl: env.telegramBotUrl,
     offerVersion: env.offerVersion,
+    botImageFileId: env.botImageFileId,
     adminUsername: env.adminUsername,
     adminUserIds: env.adminUserIds,
   });

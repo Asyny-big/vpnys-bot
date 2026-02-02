@@ -24,6 +24,7 @@ import { registerBroadcast } from "./broadcast";
 export type BotDeps = Readonly<{
   botToken: string;
   telegramBotUrl: string;
+  botImageFileId?: string;
   prisma: PrismaClient;
   onboarding: OnboardingService;
   subscriptions: SubscriptionService;
@@ -83,8 +84,21 @@ function backToCabinetKeyboard(deps: BotDeps): InlineKeyboard {
 async function replyOrEdit(ctx: any, text: string, opts: ReplyOpts = {}): Promise<void> {
   try {
     if (ctx.callbackQuery?.message) {
-      await ctx.editMessageText(text, { ...opts, link_preview_options: { is_disabled: true } });
-      return;
+      try {
+        await ctx.editMessageText(text, { ...opts, link_preview_options: { is_disabled: true } });
+        return;
+      } catch {
+        const replyMarkup = opts.reply_markup;
+        const canEditWithMarkup = replyMarkup === undefined || replyMarkup instanceof InlineKeyboard;
+        if (canEditWithMarkup) {
+          try {
+            await ctx.editMessageCaption(text, { parse_mode: opts.parse_mode, reply_markup: replyMarkup });
+            return;
+          } catch {
+            // fall through to reply
+          }
+        }
+      }
     }
   } catch {
     // fall back to reply
@@ -110,6 +124,7 @@ export function buildBot(deps: BotDeps): Bot {
   const inflightTtlMs = 30_000;
   const startPhotoPath = path.join(process.cwd(), "imag", "lis.png");
   let startPhotoFileId: string | undefined;
+  let botImageFileId = deps.botImageFileId?.trim() || undefined;
   const blockedText = "\u26D4 \u0412\u044B \u0437\u0430\u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u0430\u043D\u044B \u0432 LisVPN";
 
   const isAdmin = (ctx: any): boolean => {
@@ -165,16 +180,68 @@ export function buildBot(deps: BotDeps): Bot {
     return url.toString();
   };
 
-  const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
-    const opts = { caption, reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } };
+  const MAX_TELEGRAM_CAPTION_LENGTH = 1024;
+  const replyOrEditBranded = async (ctx: any, caption: string, opts: ReplyOpts = {}): Promise<void> => {
+    if (!botImageFileId) {
+      await replyOrEdit(ctx, caption, opts);
+      return;
+    }
+    if (caption.length > MAX_TELEGRAM_CAPTION_LENGTH) {
+      await replyOrEdit(ctx, caption, opts);
+      return;
+    }
+
+    const replyMarkup = opts.reply_markup;
+    const canEditWithMarkup = replyMarkup === undefined || replyMarkup instanceof InlineKeyboard;
+
     try {
+      if (ctx.callbackQuery?.message && canEditWithMarkup) {
+        // If the current message is already a photo: edit caption.
+        await ctx.editMessageCaption(caption, { parse_mode: opts.parse_mode, reply_markup: replyMarkup });
+        return;
+      }
+    } catch {
+      // fall through (may be a text message -> needs editMessageMedia)
+    }
+
+    try {
+      if (ctx.callbackQuery?.message && canEditWithMarkup) {
+        // Convert text -> photo (or replace media) while keeping the same message thread.
+        await ctx.editMessageMedia(
+          { type: "photo", media: botImageFileId, caption, parse_mode: opts.parse_mode },
+          { reply_markup: replyMarkup },
+        );
+        return;
+      }
+    } catch {
+      // fall back to plain text
+    }
+
+    try {
+      await ctx.replyWithPhoto(botImageFileId, { caption, parse_mode: opts.parse_mode, reply_markup: replyMarkup });
+      return;
+    } catch {
+      await replyOrEdit(ctx, caption, opts);
+    }
+  };
+
+  const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
+    const opts = { caption, reply_markup: MAIN_KEYBOARD };
+    try {
+      if (botImageFileId) {
+        await ctx.replyWithPhoto(botImageFileId, opts);
+        return;
+      }
       if (startPhotoFileId) {
         await ctx.replyWithPhoto(startPhotoFileId, opts);
         return;
       }
       const sent: any = await ctx.replyWithPhoto(new InputFile(startPhotoPath), opts);
       const fileId = sent?.photo?.[sent.photo.length - 1]?.file_id;
-      if (fileId) startPhotoFileId = fileId;
+      if (fileId) {
+        startPhotoFileId = fileId;
+        botImageFileId = fileId;
+      }
     } catch {
       await ctx.reply(caption, { reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
     }
@@ -309,7 +376,7 @@ export function buildBot(deps: BotDeps): Bot {
     kb.text("🔗 Рефералка", "nav:ref").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+    await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
   const showReferral = async (ctx: any): Promise<void> => {
@@ -371,7 +438,7 @@ export function buildBot(deps: BotDeps): Bot {
       .filter(Boolean)
       .join("\n");
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+    await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
 
   const showMySubscription = async (ctx: any): Promise<void> => {
@@ -415,7 +482,7 @@ export function buildBot(deps: BotDeps): Bot {
       .row()
       .add(supportButton(deps, "🆘 Поддержка"));
 
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+    await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
 
   const showDevices = async (ctx: any): Promise<void> => {
