@@ -1153,6 +1153,74 @@ export function buildBot(deps: BotDeps): Bot {
     await replyOrEdit(ctx, `✅ Промокод добавлен: ${created.promo.code}, ${created.promo.bonusDays} дней`);
   });
 
+  // Админ-команда для ручного увеличения лимита устройств
+  bot.command("addslot", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Команда доступна только администратору");
+      return;
+    }
+
+    const text = ctx.message?.text ?? "";
+    const args = text.trim().split(/\s+/).slice(1);
+
+    const targetTelegramId = String(args[0] ?? "").trim();
+    const countRaw = args[1] ?? "1";
+
+    if (!/^\d{1,20}$/.test(targetTelegramId)) {
+      await replyOrEdit(ctx, "Формат: /addslot <telegramId> [count]\nПример: /addslot 123456789 2");
+      return;
+    }
+
+    const count = Number.parseInt(countRaw, 10);
+    if (!Number.isFinite(count) || count <= 0 || count > 10) {
+      await replyOrEdit(ctx, "❌ count должен быть целым числом от 1 до 10");
+      return;
+    }
+
+    try {
+      // Найти пользователя
+      const user = await deps.prisma.user.findUnique({
+        where: { telegramId: targetTelegramId },
+      });
+
+      if (!user) {
+        await replyOrEdit(ctx, `❌ Пользователь с telegramId <code>${escapeHtml(targetTelegramId)}</code> не найден`, { parse_mode: "HTML" });
+        return;
+      }
+
+      // Найти подписку
+      const subscription = await deps.prisma.subscription.findUnique({
+        where: { userId: user.id },
+      });
+
+      if (!subscription) {
+        await replyOrEdit(ctx, `❌ У пользователя <code>${escapeHtml(targetTelegramId)}</code> нет подписки`, { parse_mode: "HTML" });
+        return;
+      }
+
+      // Увеличить deviceLimit
+      const updated = await deps.prisma.subscription.update({
+        where: { id: subscription.id },
+        data: { deviceLimit: subscription.deviceLimit + count },
+      });
+
+      await replyOrEdit(
+        ctx,
+        [
+          "✅ Слоты добавлены",
+          `👤 Пользователь: <code>${escapeHtml(targetTelegramId)}</code>`,
+          `➕ Добавлено: ${count}`,
+          `📱 Новый лимит устройств: ${updated.deviceLimit}`,
+        ].join("\n"),
+        { parse_mode: "HTML" },
+      );
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("addslot failed", { targetTelegramId, count, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Не удалось добавить слоты. Подробности в логах.");
+    }
+  });
+
   bot.hears("🏠 Личный кабинет", showCabinet);
   bot.hears("🆘 Поддержка", showSupport);
   bot.hears("📱 Мои устройства", async (ctx) => {
