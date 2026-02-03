@@ -961,14 +961,24 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
+    // Применяем новую дату к expiresAt и синхронизируем с 3x-ui
+    try {
+      await deps.subscriptions.setExpiryAndEnable({
+        user: required.user,
+        expiresAt: result.paidUntil,
+        enable: true,
+      });
+    } catch (e) {
+      console.error("Failed to sync promo to 3x-ui:", e);
+      await replyOrEdit(ctx, "⚠️ Промокод записан, но произошла ошибка синхронизации. Попробуйте обновить личный кабинет.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
     await replyOrEdit(
       ctx,
       [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDateTime(result.paidUntil))}</b>`].join("\n"),
       { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) },
     );
-
-    // Best-effort: propagate paidUntil to 3x-ui right away, so panel shows the new date without waiting for the worker tick.
-    await deps.subscriptions.syncFromXui(required.user).catch(() => { });
   });
 
   bot.command("devices", async (ctx) => {
