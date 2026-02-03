@@ -1,20 +1,20 @@
 {
   "NL": {
-    "name": "[OpenRay] 🇳🇱 NL-563",
-    "config": "vless://a44e0875-210f-4941-9062-89b6361a14c6@80.85.245.242:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=i5a8i2AWUSMZ-rYA6hGBRCBBoe7W5ah33SCdF5JkMk4&sid=8bcfe256cf216fd8&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-563",
-    "bandwidth": 17.77,
-    "ttfb": 0.523075
+    "name": "[OpenRay] 🇳🇱 NL-579",
+    "config": "vless://f4fec1b0-a67e-4967-b9ea-0bd832b57a4d@37.218.247.35:8443?encryption=none&fp=chrome&pbk=upDCW94g-pSYQrmXvOrTVYlwBUrSKhYFF9QwrqObdVo&security=reality&sid=3ca620a7ed5f3196&sni=sun6-21.userapi.com&type=tcp#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-579",
+    "bandwidth": 36.68,
+    "ttfb": 0.338142
   },
   "DE": {
-    "name": "[OpenRay] 🇩🇪 DE-5804",
-    "config": "vless://63f92f3c-447c-4283-80b9-0af8e164cdad@5.45.109.158:22955?encryption=none&security=reality&sni=one-piece.com&fp=chrome&pbk=9Mt_Y8J_qDb1khlieWnhDSAq-kGtLHw6aOKgkAzOMms&sid=6ba85179e30d4fc2&type=grpc&serviceName=grpc&packetEncoding=xudp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-5804",
-    "bandwidth": 12.59,
-    "ttfb": 0.446701
+    "name": "[OpenRay] 🇸🇪 SE-95",
+    "config": "vless://666250e3-362e-440a-b9e3-2b7794c02af8@84.32.49.85:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=sw.asbndx.com&fp=qq&pbk=pU7ElcbPMVObHoWqGThioVD4i5ux_phWFwElN97aDSQ&sid=0f4dacf89993e21f&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%B8%F0%9F%87%AA%20SE-95",
+    "bandwidth": 55.84,
+    "ttfb": 0.130324
   },
   "FI": {
-    "name": "[🇫🇮] [vl-no-ra] [260131-193129.810]",
-    "config": "vless://b16e18a9-6363-4af5-9144-7fba011c1f25@65.109.219.76:19854?encryption=none&type=raw&headerType=none&security=none#[🇫🇮] [vl-no-ra] [260131-193129.810]",
-    "bandwidth": 0,
-    "ttfb": 0.199147
+    "name": "[OpenRay] 🇫🇮 FI-228",
+    "config": "vless://e04f764c-6009-45aa-b033-97a90024634b@94.131.100.42:42642?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=iIRXKqJFxSwYKAvwwB952WMLgU1UDC9yFqNUsRYuW2U&security=reality&sid=41ac&sni=stats.vk-portal.net&type=tcp#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-228",
+    "bandwidth": 54.66,
+    "ttfb": 0.29838
   }
 }
