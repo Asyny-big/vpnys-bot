@@ -690,14 +690,13 @@ export async function registerSubscriptionRoutes(
     
     // State
     let currentPlatform = 'android';
-    let currentApp = 'hiddify';
+    let currentApp = 'happ';
 
     // Data
     const APPS = {
         android: [
-            { id: 'happ', name: 'Happ', desc: 'Простой и удобный клиент', link: 'happ://add/' },
-            { id: 'hiddify', name: 'Hiddify', desc: 'Рекомендуемое. Красивый и простой', link: 'hiddify://install-config?url=' },
-            { id: 'v2rayng', name: 'v2RayNG', desc: 'Классический клиент, надежный', link: 'v2rayng://install-config?url=' }
+            { id: 'happ', name: 'Happ', desc: 'Простой и удобный', recommended: true, link: 'happ://add/' },
+            { id: 'v2rayng', name: 'v2RayNG', desc: 'Классический клиент', link: 'v2rayng://install-config?url=' }
         ],
         ios: [
             { id: 'streisand', name: 'Streisand', desc: 'Отличный дизайн, бесплатно', link: 'streisand://import/' },
@@ -707,14 +706,9 @@ export async function registerSubscriptionRoutes(
 
     const STEPS = {
         happ: [
-            "Установите Happ",
+            '<a href="https://www.happ.su/main" target="_blank" rel="noopener noreferrer" style="color: var(--accent); text-decoration: underline;">Установите Happ</a>',
             "Нажмите «Подключить» ниже",
-            "Приложение откроется и добавит подписку"
-        ],
-        hiddify: [
-            "Установите Hiddify из Google Play / AppStore",
-            "Нажмите кнопку «Подключить» ниже",
-            "В приложении нажмите большую кнопку Старт"
+            "Приложение откроется автоматически"
         ],
         v2rayng: [
             "Скачайте v2RayNG",
@@ -771,27 +765,33 @@ export async function registerSubscriptionRoutes(
         const container = document.getElementById('apps-container');
         const list = APPS[currentPlatform];
         
-        container.innerHTML = list.map(app => 
-            '<div class=\"app-option ' + (currentApp === app.id ? 'selected' : '') + '\" onclick=\"selectApp(\\'' + app.id + '\\')\">' +
+        container.innerHTML = list.map(app => {
+            const badge = app.recommended ? '<span style=\"background: linear-gradient(135deg, #10b981, #059669); color: white; font-size: 10px; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 8px; vertical-align: middle;\">Рекомендуем</span>' : '';
+            return '<div class=\"app-option ' + (currentApp === app.id ? 'selected' : '') + '\" onclick=\"selectApp(\\'' + app.id + '\\')\">' +
             '    <div class=\"app-info\">' +
-            '        <span class=\"app-name\">' + app.name + '</span>' +
+            '        <span class=\"app-name\">' + app.name + badge + '</span>' +
             '        <span class=\"app-desc\">' + app.desc + '</span>' +
             '    </div>' +
             '    <div class=\"radio-circle\"></div>' +
-            '</div>'
-        ).join('');
+            '</div>';
+        }).join('');
     }
 
     function renderSteps() {
         const container = document.getElementById('steps-container');
         const steps = STEPS[currentApp] || ["Скачать", "Подключить", "Радоваться"];
+        const stepDescs = {
+            0: currentApp === 'happ' ? 'Скачайте с официального сайта' : 'Скачайте приложение',
+            1: 'Это откроет приложение',
+            2: 'VPN подключится автоматически'
+        };
         
         container.innerHTML = steps.map((text, i) => 
             '<div class=\"step\">' +
             '    <div class=\"step-num\">' + (i + 1) + '</div>' +
             '    <div class=\"step-content\">' +
             '        <div class=\"step-title\">' + text + '</div>' +
-            '        <div class=\"step-desc\">Следуйте инструкции на экране.</div>' +
+            '        <div class=\"step-desc\">' + (stepDescs[i] || '') + '</div>' +
             '    </div>' +
             '</div>'
         ).join('');
