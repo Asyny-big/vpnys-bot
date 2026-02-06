@@ -6,10 +6,10 @@
     "ttfb": 0.230591
   },
   "DE": {
-    "name": "[OpenRay] 🇸🇪 SE-57",
-    "config": "vless://a7a9f670-44c0-45a9-8047-69db0203c142@193.23.200.153:443?encryption=none&security=tls&sni=secdn17.suio.me&type=tcp#%5BOpenRay%5D%20%F0%9F%87%B8%F0%9F%87%AA%20SE-57",
-    "bandwidth": 52.02,
-    "ttfb": 0.27731
+    "name": "[OpenRay] 🇳🇱 NL-957",
+    "config": "vmess://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh7Pwn4exIE5MLTk1NyIsImFkZCI6IjkyLjI0Ni44Ny4xNzAiLCJwb3J0IjoiMTgzNTUiLCJpZCI6ImNhZjkyMWM3LWFjNjMtNDBiYy1mYWExLWNkYTA5N2ZkN2U0MiIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0IjoidGNwIiwidHlwZSI6IiIsInRscyI6IiJ9",
+    "bandwidth": 47.46,
+    "ttfb": 0.137632
   },
   "FI": {
     "name": "[OpenRay] 🇫🇮 FI-393",
