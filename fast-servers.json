@@ -7,7 +7,7 @@
   },
   "DE": {
     "name": "[OpenRay] 🇳🇱 NL-957",
-    "config": "vless://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh7Pwn4exIE5MLTk1NyIsImFkZCI6IjkyLjI0Ni44Ny4xNzAiLCJwb3J0IjoiMTgzNTUiLCJpZCI6ImNhZjkyMWM3LWFjNjMtNDBiYy1mYWExLWNkYTA5N2ZkN2U0MiIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0IjoidGNwIiwidHlwZSI6IiIsInRscyI6IiJ9",
+    "config": "vmess://eyJ2IjoiMiIsInBzIjoiW09wZW5SYXldIPCfh7Pwn4exIE5MLTk1NyIsImFkZCI6IjkyLjI0Ni44Ny4xNzAiLCJwb3J0IjoiMTgzNTUiLCJpZCI6ImNhZjkyMWM3LWFjNjMtNDBiYy1mYWExLWNkYTA5N2ZkN2U0MiIsImFpZCI6IjAiLCJzY3kiOiJhdXRvIiwibmV0IjoidGNwIiwidHlwZSI6IiIsInRscyI6IiJ9",
     "bandwidth": 42.17,
     "ttfb": 0.150316
   },
