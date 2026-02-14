@@ -1,20 +1,20 @@
 {
   "NL": {
     "name": "[OpenRay] 🇳🇱 NL-1207",
-    "config": "vless://3cceef33-56ff-4f21-8479-2e1719e04886@45.67.231.129:4443/?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=github.com&fp=chrome&security=reality&pbk=5XB_N3ATilH-6tp_MXht-84_y5YaJnx_Z7MbuY2otHE&sid=aa7e96542880027a#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-1207",
+    "config": "vless://3cceef33-56ff-4f21-8479-2e1719e04886@45.67.231.129:4443?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=github.com&fp=chrome&security=reality&pbk=5XB_N3ATilH-6tp_MXht-84_y5YaJnx_Z7MbuY2otHE&sid=aa7e96542880027a#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-1207",
     "bandwidth": 42.98,
     "ttfb": 0.184193
   },
   "DE": {
-    "name": "[OpenRay] 🇩🇪 DE-4592",
-    "config": "vless://3fa2f5cd-0cbc-4e4f-bce1-a59ae090eef4@192.76.160.216:2280?security=reality&encryption=none&pbk=3O9CVvzD_0omAKw17VJoL0NlezpzxRAHNIbOWGBto2I&headerType=none&fp=firefox&type=tcp&sni=tgju.org&sid=faf804ddc2e49f6c#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-4592",
-    "bandwidth": 49.18,
-    "ttfb": 0.210313
+    "name": "[OpenRay] 🇩🇪 DE-9442",
+    "config": "vless://64b5d863-81d6-48ea-9222-82030616fa63@176.96.138.241:443?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=qFBIVGsvXTMeJcdJz6GiL7DG0XNhCg7rItza7t0qTgU&security=reality&sid=9eb31eb7572c0882&sni=google.com&type=tcp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-9442",
+    "bandwidth": 47.24,
+    "ttfb": 0.188052
   },
   "FI": {
     "name": "[OpenRay] 🇫🇮 FI-228",
     "config": "vless://e04f764c-6009-45aa-b033-97a90024634b@94.131.100.42:42642?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=iIRXKqJFxSwYKAvwwB952WMLgU1UDC9yFqNUsRYuW2U&security=reality&sid=41ac&sni=stats.vk-portal.net&type=tcp#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-228",
-    "bandwidth": 42.26,
-    "ttfb": 0.37642
+    "bandwidth": 39.86,
+    "ttfb": 0.412595
   }
 }
