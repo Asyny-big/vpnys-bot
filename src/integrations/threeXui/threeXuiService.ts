@@ -291,7 +291,6 @@ export class ThreeXUiService {
   }): any {
     const expiryTime = input.expiresAt ? input.expiresAt.getTime() : 0;
     const limitIp = clampDeviceLimit(input.deviceLimit);
-    const flow = typeof input.flow === "string" && input.flow.trim().length ? input.flow.trim() : "xtls-rprx-vision";
     const patch: any = {
       id: input.uuid,
       email: input.email,
@@ -299,8 +298,8 @@ export class ThreeXUiService {
       expiryTime,
       subId: input.subscriptionId,
       limitIp,
-      flow,
     };
+    if (input.flow) patch.flow = input.flow;
     return patch;
   }
 
@@ -321,7 +320,6 @@ export class ThreeXUiService {
 
     const uuid = randomUUID();
     const subId = ThreeXUiService.newSubscriptionId();
-    const flow = typeof params.flow === "string" && params.flow.trim().length ? params.flow.trim() : "xtls-rprx-vision";
 
     await this.api.requestJson("/panel/api/inbounds/addClient", {
       method: "POST",
@@ -329,7 +327,7 @@ export class ThreeXUiService {
       body: JSON.stringify({
         id: params.inboundId,
         settings: JSON.stringify({
-          clients: [this.buildClientPatch({ uuid, email, subscriptionId: subId, enabled: true, deviceLimit: params.deviceLimit, flow })],
+          clients: [this.buildClientPatch({ uuid, email, subscriptionId: subId, enabled: true, deviceLimit: params.deviceLimit, flow: params.flow })],
         }),
       }),
     });
