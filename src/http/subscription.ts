@@ -8,9 +8,16 @@ import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
 import { detectAndLogDevice } from "../utils/deviceDetect";
 
+const DEFAULT_XUI_CLIENT_FLOW = "xtls-rprx-vision";
+
 function hostnameFromUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   return url.hostname;
+}
+
+function resolveClientFlow(flow?: string): string {
+  const normalized = (flow ?? "").trim();
+  return normalized.length ? normalized : DEFAULT_XUI_CLIENT_FLOW;
 }
 
 function escapeHtml(text: string): string {
@@ -50,6 +57,8 @@ export async function registerSubscriptionRoutes(
     xuiClientFlow?: string;
   }>,
 ): Promise<void> {
+  const xuiClientFlow = resolveClientFlow(deps.xuiClientFlow);
+
   const backendPublicOrigin = (() => {
     try {
       return new URL(deps.backendPublicUrl).origin;
@@ -981,7 +990,7 @@ export async function registerSubscriptionRoutes(
               name: "LisVPN",
               host: hostnameFromUrl(deps.backendPublicUrl),
               uuid: state.subscription.xuiClientUuid,
-              flow: deps.xuiClientFlow,
+              flow: xuiClientFlow,
               template,
             };
           } catch (err) {

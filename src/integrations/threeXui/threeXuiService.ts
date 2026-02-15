@@ -21,6 +21,7 @@ export type ThreeXUiClientInfo = Readonly<{
   expiryTime?: number;
   enabled: boolean;
   limitIp?: number;
+  flow?: string;
 }>;
 
 export type VlessRealityTemplate = Readonly<{
@@ -234,6 +235,7 @@ export class ThreeXUiService {
         expiryTime,
         enabled: client.enable !== false,
         limitIp: Number.isFinite(rawLimitIp) ? rawLimitIp : undefined,
+        flow: typeof client.flow === "string" && client.flow.trim().length ? client.flow.trim() : undefined,
       };
     });
   }
@@ -259,6 +261,7 @@ export class ThreeXUiService {
       expiryTime,
       enabled: client.enable !== false,
       limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
+      flow: typeof client.flow === "string" && client.flow.trim().length ? client.flow.trim() : undefined,
     };
   }
 
@@ -277,6 +280,7 @@ export class ThreeXUiService {
       expiryTime,
       enabled: client.enable !== false,
       limitIp: Number.isFinite(client.limitIp) ? Number(client.limitIp) : undefined,
+      flow: typeof client.flow === "string" && client.flow.trim().length ? client.flow.trim() : undefined,
     };
   }
 
@@ -347,7 +351,7 @@ export class ThreeXUiService {
   async updateClient(
     inboundId: number,
     uuid: string,
-    patch: Partial<Pick<ThreeXUiClientInfo, "expiresAt" | "enabled" | "subscriptionId">> & { deviceLimit?: number },
+    patch: Partial<Pick<ThreeXUiClientInfo, "expiresAt" | "enabled" | "subscriptionId" | "flow">> & { deviceLimit?: number },
   ): Promise<void> {
     const raw = await this.getClientRawByUuid(inboundId, uuid);
     if (!raw) throw new ThreeXUiError(`3x-ui client not found: ${uuid}`);
@@ -375,6 +379,7 @@ export class ThreeXUiService {
       subId: patch.subscriptionId ?? raw.subId ?? "",
       // Enforce per-user device limit.
       limitIp,
+      ...(patch.flow !== undefined ? { flow: patch.flow } : {}),
     };
 
     // Primary endpoint used by most x-ui/3x-ui versions.

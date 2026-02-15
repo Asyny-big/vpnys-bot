@@ -4,6 +4,8 @@ import { addDays } from "../../utils/time";
 import { SubscriptionStatus } from "../../db/values";
 import { MAX_DEVICE_LIMIT, MIN_DEVICE_LIMIT, clampDeviceLimit } from "../../domain/deviceLimits";
 
+const DEFAULT_XUI_CLIENT_FLOW = "xtls-rprx-vision";
+
 export type SubscriptionState = Readonly<{
   subscription: Subscription;
   expiresAt?: Date;
@@ -11,12 +13,17 @@ export type SubscriptionState = Readonly<{
 }>;
 
 export class SubscriptionService {
+  private readonly xuiClientFlow: string;
+
   constructor(
     private readonly prisma: PrismaClient,
     private readonly xui: ThreeXUiService,
     private readonly xuiInboundId: number,
-    private readonly xuiClientFlow?: string,
-  ) {}
+    xuiClientFlow?: string,
+  ) {
+    const normalizedFlow = (xuiClientFlow ?? "").trim();
+    this.xuiClientFlow = normalizedFlow.length ? normalizedFlow : DEFAULT_XUI_CLIENT_FLOW;
+  }
 
   async ensureForUser(user: User): Promise<Subscription> {
     const existing = await this.prisma.subscription.findUnique({ where: { userId: user.id } });
@@ -66,7 +73,12 @@ export class SubscriptionService {
     const client = await this.xui.findClientByUuid(subscription.xuiInboundId, subscription.xuiClientUuid);
     if (!client) {
       // Repair: DB lost sync with panel. Re-create/find by email.
-      const repaired = await this.xui.ensureClient({ inboundId: subscription.xuiInboundId, telegramId: user.telegramId, deviceLimit: subscription.deviceLimit });
+      const repaired = await this.xui.ensureClient({
+        inboundId: subscription.xuiInboundId,
+        telegramId: user.telegramId,
+        deviceLimit: subscription.deviceLimit,
+        flow: this.xuiClientFlow,
+      });
       const updated = await this.prisma.subscription.update({
         where: { id: subscription.id },
         data: {
@@ -78,6 +90,10 @@ export class SubscriptionService {
         },
       });
       return { subscription: updated, expiresAt: repaired.expiresAt, enabled: repaired.enabled };
+    }
+
+    if (client.flow !== this.xuiClientFlow) {
+      await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { flow: this.xuiClientFlow });
     }
 
     // 3x-ui is the source of truth for expiresAt.
