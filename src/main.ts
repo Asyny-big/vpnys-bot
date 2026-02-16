@@ -1,7 +1,7 @@
 import { run } from "@grammyjs/runner";
 import Fastify from "fastify";
 import { loadEnv } from "./config/env";
-import { MOBILE_BYPASS_URLS } from "./config/mobileBypass";
+import { getMobileBypass } from "./config/mobileBypass";
 import { loadFastServers } from "./config/fastServers";
 import * as path from "path";
 import { getPrisma } from "./db/prisma";
@@ -114,7 +114,7 @@ async function main(): Promise<void> {
       backendPublicUrl: env.backendPublicUrl,
       telegramBotUrl: env.telegramBotUrl,
       fastServerUrls: FAST_SERVER_ENTRIES,
-      mobileBypassUrls: MOBILE_BYPASS_URLS,
+      getMobileBypass,
       xuiInboundId: env.xuiInboundId,
       xuiClientFlow: env.xuiClientFlow,
     });
