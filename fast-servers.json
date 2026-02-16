@@ -1,4 +1,10 @@
 {
+  "EE": {
+    "name": "[OpenRay] 🇪🇪 EE-21345",
+    "config": "vless://f18e6e13-de3c-4d45-82d8-320a50183139@95.85.243.120:21345?type=tcp&encryption=none&security=reality&pbk=9YAsLMydLM1PEcZsCyiK5Nxc7jo1bAtWNUVHzF8Ml1Q&fp=chrome&sni=www.bing.com&sid=c58897b482dbc6&spx=%2F&flow=xtls-rprx-vision#test-SNI-6yb1odso",
+    "bandwidth": 0,
+    "ttfb": 0
+  },
   "NL": {
     "name": "[OpenRay] 🇳🇱 NL-1207",
     "config": "vless://3cceef33-56ff-4f21-8479-2e1719e04886@45.67.231.129:4443?type=tcp&encryption=none&flow=xtls-rprx-vision&sni=github.com&fp=chrome&security=reality&pbk=5XB_N3ATilH-6tp_MXht-84_y5YaJnx_Z7MbuY2otHE&sid=aa7e96542880027a#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-1207",

@@ -22,6 +22,7 @@ export type FastServersJson = Readonly<Record<string, FastServerResult>>;
  * Маппинг кода страны → флаг + красивое имя для подписки.
  */
 const COUNTRY_DISPLAY: Readonly<Record<string, { flag: string; name: string }>> = {
+    EE: { flag: "🇪🇪", name: "Эстония (быстрее)" },
     NL: { flag: "🇳🇱", name: "Нидерланды" },
     DE: { flag: "🇩🇪", name: "Германия" },
     FI: { flag: "🇫🇮", name: "Финляндия" },
@@ -30,7 +31,7 @@ const COUNTRY_DISPLAY: Readonly<Record<string, { flag: string; name: string }>> 
 /**
  * Порядок стран в подписке (сразу после основного сервера).
  */
-const COUNTRY_ORDER: ReadonlyArray<string> = ["NL", "DE", "FI"];
+const COUNTRY_ORDER: ReadonlyArray<string> = ["EE", "NL", "DE", "FI"];
 
 export interface FastServerEntry {
     readonly displayName: string;
@@ -72,3 +73,4 @@ export function loadFastServers(jsonPath: string): ReadonlyArray<FastServerEntry
         return [];
     }
 }
+
