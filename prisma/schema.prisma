@@ -52,7 +52,7 @@ model Subscription {
   // Cached mirror of 3x-ui fields (expiration is still the source of truth in 3x-ui).
   // SQLite: store as string (no Prisma enum support in this project).
   status            String              @default("ACTIVE")
-  // Source of truth for per-user device limit (mirrored to 3x-ui client.limitIp).
+  // Source of truth for per-user device limit (enforced by backend DB logic).
   deviceLimit       Int                 @default(1)
   expiresAt         DateTime?
   // Source of truth for "paid until" including promo extensions.

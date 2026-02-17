@@ -111,7 +111,7 @@ export class SubscriptionService {
     // ✅ ИСПРАВЛЕНО: subscription.deviceLimit - это МАКСИМУМ слотов, НЕ количество подключенных устройств.
     // limitIp в 3x-ui должен соответствовать deviceLimit (максимальному количеству устройств).
     // Реальные устройства хранятся в таблице DeviceConfig и управляются через deviceService.
-    if (typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
+    if (this.xui.isIpLimitEnforced() && typeof client.limitIp === "number" && client.limitIp !== subscription.deviceLimit) {
       await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { deviceLimit: subscription.deviceLimit });
     }
 
@@ -192,7 +192,9 @@ export class SubscriptionService {
       await this.prisma.subscription.update({ where: { id: updated.id }, data: { deviceLimit } });
     }
 
-    await this.xui.updateClient(updated.xuiInboundId, updated.xuiClientUuid, { deviceLimit });
+    if (this.xui.isIpLimitEnforced()) {
+      await this.xui.updateClient(updated.xuiInboundId, updated.xuiClientUuid, { deviceLimit });
+    }
 
     return await this.prisma.subscription.update({
       where: { id: updated.id },
@@ -214,7 +216,9 @@ export class SubscriptionService {
       ? { ...subscription, deviceLimit: current }
       : await this.prisma.subscription.update({ where: { id: subscription.id }, data: { deviceLimit: target } });
 
-    await this.xui.updateClient(next.xuiInboundId, next.xuiClientUuid, { deviceLimit: next.deviceLimit });
+    if (this.xui.isIpLimitEnforced()) {
+      await this.xui.updateClient(next.xuiInboundId, next.xuiClientUuid, { deviceLimit: next.deviceLimit });
+    }
 
     return await this.prisma.subscription.update({
       where: { id: next.id },

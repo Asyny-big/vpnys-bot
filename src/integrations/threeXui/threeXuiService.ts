@@ -41,14 +41,28 @@ export type VlessRealityTemplate = Readonly<{
   grpcServiceName?: string;
 }>;
 
+type ThreeXUiServiceOptions = Readonly<{
+  enforceIpLimit?: boolean;
+}>;
+
 export class ThreeXUiService {
-  constructor(private readonly api: ThreeXUiApiClient) { }
+  constructor(
+    private readonly api: ThreeXUiApiClient,
+    options: ThreeXUiServiceOptions = {},
+  ) {
+    this.enforceIpLimit = options.enforceIpLimit === true;
+  }
 
   private readonly vlessRealityTemplateCache = new Map<number, { fetchedAt: number; value: VlessRealityTemplate }>();
   private readonly vlessRealityTemplateTtlMs = 10 * 60 * 1000;
+  private readonly enforceIpLimit: boolean;
 
   telegramEmail(telegramId: string): string {
     return `tg:${telegramId}`;
+  }
+
+  isIpLimitEnforced(): boolean {
+    return this.enforceIpLimit;
   }
 
   async listInbounds(): Promise<Inbound[]> {
@@ -220,6 +234,11 @@ export class ThreeXUiService {
     return inbound;
   }
 
+  private resolveLimitIp(deviceLimit: number): number {
+    if (!this.enforceIpLimit) return 0;
+    return clampDeviceLimit(deviceLimit);
+  }
+
   async listClients(inboundId: number): Promise<ThreeXUiClientInfo[]> {
     const inbound = await this.getInboundOrThrow(inboundId);
     const clients = this.parseClients(inbound.settings);
@@ -294,7 +313,7 @@ export class ThreeXUiService {
     flow?: string;
   }): any {
     const expiryTime = input.expiresAt ? input.expiresAt.getTime() : 0;
-    const limitIp = clampDeviceLimit(input.deviceLimit);
+    const limitIp = this.resolveLimitIp(input.deviceLimit);
     const patch: any = {
       id: input.uuid,
       email: input.email,
@@ -364,20 +383,22 @@ export class ThreeXUiService {
           ? Number(raw.expiryTime)
           : 0;
 
-    const limitIp = clampDeviceLimit(
-      patch.deviceLimit !== undefined
-        ? patch.deviceLimit
-        : Number.isFinite(raw.limitIp)
-          ? Number(raw.limitIp)
-          : 1,
-    );
+    const limitIp = this.enforceIpLimit
+      ? clampDeviceLimit(
+        patch.deviceLimit !== undefined
+          ? patch.deviceLimit
+          : Number.isFinite(raw.limitIp)
+            ? Number(raw.limitIp)
+            : 1,
+      )
+      : 0;
 
     const updatedClient = {
       ...raw,
       enable: patch.enabled ?? raw.enable ?? true,
       expiryTime,
       subId: patch.subscriptionId ?? raw.subId ?? "",
-      // Enforce per-user device limit.
+      // Apply configured limitIp policy (enforced value or hard-disabled with 0).
       limitIp,
       ...(patch.flow !== undefined ? { flow: patch.flow } : {}),
     };
@@ -427,6 +448,26 @@ export class ThreeXUiService {
 
   async enable(inboundId: number, uuid: string, deviceLimit?: number): Promise<void> {
     await this.updateClient(inboundId, uuid, { enabled: true, ...(deviceLimit !== undefined ? { deviceLimit } : {}) });
+  }
+
+  async disableIpLimitForInbound(inboundId: number): Promise<{ scanned: number; updated: number; failed: number }> {
+    if (this.enforceIpLimit) return { scanned: 0, updated: 0, failed: 0 };
+
+    const clients = await this.listClients(inboundId);
+    const targets = clients.filter((client) => (client.limitIp ?? 0) > 0);
+    let updated = 0;
+    let failed = 0;
+
+    for (const client of targets) {
+      try {
+        await this.updateClient(inboundId, client.uuid, {});
+        updated++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { scanned: clients.length, updated, failed };
   }
 
   /**

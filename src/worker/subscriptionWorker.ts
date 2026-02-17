@@ -159,7 +159,7 @@ export function startSubscriptionWorker(deps: {
               const wasEnabled = enabled;
 
               if (enabled) {
-                await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid, sub.deviceLimit);
+                await deps.xui.disable(sub.xuiInboundId, sub.xuiClientUuid);
               }
 
               // Clear all devices on expiration (prevents using old devices with new lower-limit subscription)

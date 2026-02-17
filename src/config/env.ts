@@ -28,6 +28,7 @@ type Env = Readonly<{
   xuiPassword: string;
   xuiInboundId: number;
   xuiClientFlow?: string;
+  xuiEnforceIpLimit: boolean;
 
   webhookToken: string;
 
@@ -84,6 +85,13 @@ function asNumber(name: string, value: string): number {
   const parsed = Number(value.trim());
   if (!Number.isFinite(parsed)) throw new Error(`Invalid number env ${name}: ${value}`);
   return parsed;
+}
+
+function asBoolean(name: string, value: string): boolean {
+  const raw = value.trim().toLowerCase();
+  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true;
+  if (raw === "0" || raw === "false" || raw === "no" || raw === "off") return false;
+  throw new Error(`Invalid boolean env ${name}: ${value}`);
 }
 
 function requirePositiveInt(name: string): number {
@@ -219,6 +227,9 @@ export function loadEnv(): Env {
     xuiPassword: required("XUI_PASSWORD"),
     xuiInboundId: requirePositiveInt("XUI_INBOUND_ID"),
     xuiClientFlow: optional("XUI_CLIENT_FLOW"),
+    xuiEnforceIpLimit: process.env.XUI_ENFORCE_IP_LIMIT
+      ? asBoolean("XUI_ENFORCE_IP_LIMIT", process.env.XUI_ENFORCE_IP_LIMIT)
+      : false,
 
     webhookToken: required("WEBHOOK_TOKEN"),
 

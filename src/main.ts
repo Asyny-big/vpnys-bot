@@ -37,7 +37,7 @@ async function main(): Promise<void> {
     username: env.xuiUsername,
     password: env.xuiPassword,
   });
-  const xui = new ThreeXUiService(xuiApi);
+  const xui = new ThreeXUiService(xuiApi, { enforceIpLimit: env.xuiEnforceIpLimit });
 
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
   const bans = new BanService(prisma);
@@ -121,6 +121,20 @@ async function main(): Promise<void> {
   });
 
   await app.listen({ host: env.appHost, port: env.appPort });
+
+  if (!env.xuiEnforceIpLimit) {
+    void xui.disableIpLimitForInbound(env.xuiInboundId)
+      .then((result) => {
+        app.log.info(
+          { inboundId: env.xuiInboundId, scanned: result.scanned, updated: result.updated, failed: result.failed },
+          "xui: limitIp disabled for inbound clients",
+        );
+      })
+      .catch((err) => {
+        app.log.warn({ err, inboundId: env.xuiInboundId }, "xui: failed to disable limitIp for inbound clients");
+      });
+  }
+
   startSubscriptionWorker({
     prisma,
     xui,
