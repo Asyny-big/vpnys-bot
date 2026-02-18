@@ -6,15 +6,15 @@
     "ttfb": 0.184193
   },
   "DE": {
-    "name": "[OpenRay] 🇩🇪 DE-9442",
-    "config": "vless://64b5d863-81d6-48ea-9222-82030616fa63@176.96.138.241:443?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=qFBIVGsvXTMeJcdJz6GiL7DG0XNhCg7rItza7t0qTgU&security=reality&sid=9eb31eb7572c0882&sni=google.com&type=tcp#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-9442",
-    "bandwidth": 47.24,
-    "ttfb": 0.188052
+    "name": "[🇩🇪] [vl-re-ra] [260218-112050.840]",
+    "config": "vless://98064528-8718-4f21-bd05-ae5785fbbd0a@87.106.37.221:443?encryption=none&flow=xtls-rprx-vision&type=raw&headerType=none&security=reality&fp=chrome&pbk=ckRcueERkPqqjZABwxqni_J_Nbb70Q6k5fEEUAjoImw&sni=azure.com#[🇩🇪] [vl-re-ra] [260218-112050.840]",
+    "bandwidth": 4.76,
+    "ttfb": 0.460728
   },
   "FI": {
-    "name": "[OpenRay] 🇫🇮 FI-228",
-    "config": "vless://e04f764c-6009-45aa-b033-97a90024634b@94.131.100.42:42642?encryption=none&flow=xtls-rprx-vision&fp=chrome&pbk=iIRXKqJFxSwYKAvwwB952WMLgU1UDC9yFqNUsRYuW2U&security=reality&sid=41ac&sni=stats.vk-portal.net&type=tcp#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-228",
-    "bandwidth": 39.86,
-    "ttfb": 0.412595
+    "name": "[OpenRay] 🇫🇮 FI-715",
+    "config": "vless://6202b230-417c-4d8e-b624-0f71afa9c75d@194.180.189.36:443?encryption=none&security=tls&sni=sni.111000.v6.navy&type=ws&host=sni.111000.v6.navy&path=%2F%3Fed%3D2560%26Telegram%F0%9F%87%A8%F0%9F%87%B3%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-715",
+    "bandwidth": 18.85,
+    "ttfb": 4.086512
   }
 }
