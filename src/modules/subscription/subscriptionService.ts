@@ -29,7 +29,7 @@ export class SubscriptionService {
     if (!this.xuiClientFlow) return undefined;
     try {
       const template = await this.xui.getVlessRealityTemplate(inboundId);
-      return template.network === "tcp" ? this.xuiClientFlow : undefined;
+      return template.network === "tcp" && template.security === "reality" ? this.xuiClientFlow : undefined;
     } catch {
       // Keep backward compatibility if inbound template is temporarily unavailable.
       return this.xuiClientFlow;

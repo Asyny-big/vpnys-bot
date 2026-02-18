@@ -123,14 +123,19 @@ function buildVlessUrl(server: SubscriptionServer): string {
 
   if (server.flow) params.set("flow", server.flow);
 
-  // Reality
-  params.set("security", "reality");
-  params.set("sni", server.template.sni);
-  if (server.template.fingerprint) params.set("fp", server.template.fingerprint);
-  if (server.template.alpn) params.set("alpn", server.template.alpn);
-  params.set("pbk", server.template.publicKey);
-  if (server.template.shortId) params.set("sid", server.template.shortId);
-  if (server.template.spiderX) params.set("spx", server.template.spiderX);
+  params.set("security", server.template.security);
+  if (server.template.security === "reality") {
+    if (server.template.sni) params.set("sni", server.template.sni);
+    if (server.template.fingerprint) params.set("fp", server.template.fingerprint);
+    if (server.template.alpn) params.set("alpn", server.template.alpn);
+    if (server.template.publicKey) params.set("pbk", server.template.publicKey);
+    if (server.template.shortId) params.set("sid", server.template.shortId);
+    if (server.template.spiderX) params.set("spx", server.template.spiderX);
+  } else if (server.template.security === "tls") {
+    if (server.template.sni) params.set("sni", server.template.sni);
+    if (server.template.fingerprint) params.set("fp", server.template.fingerprint);
+    if (server.template.alpn) params.set("alpn", server.template.alpn);
+  }
 
   // Transport
   params.set("type", server.template.network);
@@ -196,7 +201,7 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
   if (!params.primaryServer) {
     return {
       headers,
-      body: "Техническая ошибка на сервере (не задан основной сервер).\n",
+      body: "",
     };
   }
 

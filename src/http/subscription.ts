@@ -861,8 +861,9 @@ export async function registerSubscriptionRoutes(
         { primaryServer: null, mobileBypassUrls: [] },
       );
       for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
-      const body = prependText?.trim().length ? `${prependText.trim()}\n\n${built.body}` : built.body;
-      await reply.code(200).send(body);
+      // Subscription clients expect only config lines here; any plain text causes parse errors.
+      void prependText;
+      await reply.code(200).send(built.body);
     };
 
     const token = String(req.params.token ?? "").trim();
@@ -990,7 +991,7 @@ export async function registerSubscriptionRoutes(
               name: "LisVPN",
               host: hostnameFromUrl(deps.backendPublicUrl),
               uuid: state.subscription.xuiClientUuid,
-              flow: template.network === "tcp" ? xuiClientFlow : undefined,
+              flow: template.network === "tcp" && template.security === "reality" ? xuiClientFlow : undefined,
               template,
             };
           } catch (err) {

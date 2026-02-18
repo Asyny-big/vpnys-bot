@@ -28,9 +28,9 @@ export type VlessRealityTemplate = Readonly<{
   protocol: "vless";
   port: number;
   network: "tcp" | "ws" | "grpc" | "xhttp";
-  security: "reality";
-  sni: string;
-  publicKey: string;
+  security: "reality" | "tls" | "none";
+  sni?: string;
+  publicKey?: string;
   shortId?: string;
   spiderX?: string;
   fingerprint?: string;
@@ -105,13 +105,17 @@ export class ThreeXUiService {
         ? networkRaw
         : "tcp";
 
-    const security = String(stream?.security ?? "");
-    if (security !== "reality") {
-      throw new ThreeXUiError(`3x-ui inbound ${inboundId} security is not reality (got: ${security || "empty"})`, { details: inbound });
+    const securityRaw = String(stream?.security ?? "none").trim().toLowerCase();
+    let security: VlessRealityTemplate["security"];
+    if (securityRaw === "reality" || securityRaw === "tls" || securityRaw === "none") {
+      security = securityRaw;
+    } else {
+      throw new ThreeXUiError(`3x-ui inbound ${inboundId} has unsupported security (got: ${securityRaw || "empty"})`, { details: inbound });
     }
 
     const reality = stream?.realitySettings ?? stream?.reality ?? null;
     const realitySettings = (reality?.settings ?? reality?.Settings ?? null) as any;
+    const tlsSettings = (stream?.tlsSettings ?? stream?.xtlsSettings ?? null) as any;
     const publicKey = String(
       (reality?.publicKey ??
         reality?.public_key ??
@@ -123,9 +127,6 @@ export class ThreeXUiService {
         realitySettings?.pbk ??
         "") as any,
     ).trim();
-    if (!publicKey) {
-      throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality publicKey`, { details: inbound });
-    }
 
     const serverNames =
       Array.isArray(reality?.serverNames)
@@ -141,10 +142,18 @@ export class ThreeXUiService {
         realitySettings?.serverName ??
         realitySettings?.server_name ??
         realitySettings?.servername ??
+        tlsSettings?.serverName ??
+        tlsSettings?.server_name ??
         "") as any,
     ).trim();
-    if (!sni) {
-      throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality serverNames/serverName`, { details: inbound });
+
+    if (security === "reality") {
+      if (!publicKey) {
+        throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality publicKey`, { details: inbound });
+      }
+      if (!sni) {
+        throw new ThreeXUiError(`3x-ui inbound ${inboundId} missing reality serverNames/serverName`, { details: inbound });
+      }
     }
 
     const shortIds =
@@ -159,10 +168,10 @@ export class ThreeXUiService {
     const spiderXRaw = (reality?.spiderX ?? reality?.spider_x ?? realitySettings?.spiderX ?? realitySettings?.spider_x ?? "") as any;
     const spiderX = typeof spiderXRaw === "string" && spiderXRaw.trim().length ? spiderXRaw.trim() : undefined;
 
-    const fpRaw = (reality?.fingerprint ?? realitySettings?.fingerprint ?? stream?.tlsSettings?.fingerprint ?? "") as any;
+    const fpRaw = (reality?.fingerprint ?? realitySettings?.fingerprint ?? tlsSettings?.fingerprint ?? "") as any;
     const fingerprint = typeof fpRaw === "string" && fpRaw.trim().length ? fpRaw.trim() : undefined;
 
-    const alpnList = Array.isArray(reality?.alpn) ? reality.alpn : Array.isArray(stream?.tlsSettings?.alpn) ? stream.tlsSettings.alpn : null;
+    const alpnList = Array.isArray(reality?.alpn) ? reality.alpn : Array.isArray(tlsSettings?.alpn) ? tlsSettings.alpn : null;
     const alpn =
       alpnList && alpnList.map((v: any) => String(v ?? "").trim()).filter(Boolean).length
         ? alpnList.map((v: any) => String(v ?? "").trim()).filter(Boolean).join(",")
@@ -176,7 +185,7 @@ export class ThreeXUiService {
 
     const wsPathRaw = (stream?.wsSettings?.path ?? "") as any;
     const wsPath = typeof wsPathRaw === "string" && wsPathRaw.trim().length ? wsPathRaw.trim() : undefined;
-    const wsHostRaw = (stream?.wsSettings?.headers?.Host ?? stream?.wsSettings?.headers?.host ?? "") as any;
+    const wsHostRaw = (stream?.wsSettings?.host ?? stream?.wsSettings?.headers?.Host ?? stream?.wsSettings?.headers?.host ?? "") as any;
     const wsHost = typeof wsHostRaw === "string" && wsHostRaw.trim().length ? wsHostRaw.trim() : undefined;
 
     const grpcServiceNameRaw = (stream?.grpcSettings?.serviceName ?? "") as any;
@@ -198,9 +207,9 @@ export class ThreeXUiService {
       protocol: "vless",
       port,
       network,
-      security: "reality",
-      sni,
-      publicKey,
+      security,
+      ...(sni ? { sni } : {}),
+      ...(publicKey ? { publicKey } : {}),
       ...(shortId ? { shortId } : {}),
       ...(spiderX ? { spiderX } : {}),
       ...(fingerprint ? { fingerprint } : {}),
