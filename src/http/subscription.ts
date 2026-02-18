@@ -990,7 +990,7 @@ export async function registerSubscriptionRoutes(
               name: "LisVPN",
               host: hostnameFromUrl(deps.backendPublicUrl),
               uuid: state.subscription.xuiClientUuid,
-              flow: xuiClientFlow,
+              flow: template.network === "tcp" ? xuiClientFlow : undefined,
               template,
             };
           } catch (err) {

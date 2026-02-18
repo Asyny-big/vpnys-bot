@@ -25,15 +25,27 @@ export class SubscriptionService {
     this.xuiClientFlow = normalizedFlow.length ? normalizedFlow : DEFAULT_XUI_CLIENT_FLOW;
   }
 
+  private async resolveFlowForInbound(inboundId: number): Promise<string | undefined> {
+    if (!this.xuiClientFlow) return undefined;
+    try {
+      const template = await this.xui.getVlessRealityTemplate(inboundId);
+      return template.network === "tcp" ? this.xuiClientFlow : undefined;
+    } catch {
+      // Keep backward compatibility if inbound template is temporarily unavailable.
+      return this.xuiClientFlow;
+    }
+  }
+
   async ensureForUser(user: User): Promise<Subscription> {
     const existing = await this.prisma.subscription.findUnique({ where: { userId: user.id } });
     if (existing) return existing;
 
+    const flow = await this.resolveFlowForInbound(this.xuiInboundId);
     const client = await this.xui.ensureClient({
       inboundId: this.xuiInboundId,
       telegramId: user.telegramId,
       deviceLimit: MIN_DEVICE_LIMIT,
-      flow: this.xuiClientFlow,
+      flow,
     });
 
     try {
@@ -73,11 +85,12 @@ export class SubscriptionService {
     const client = await this.xui.findClientByUuid(subscription.xuiInboundId, subscription.xuiClientUuid);
     if (!client) {
       // Repair: DB lost sync with panel. Re-create/find by email.
+      const flow = await this.resolveFlowForInbound(subscription.xuiInboundId);
       const repaired = await this.xui.ensureClient({
         inboundId: subscription.xuiInboundId,
         telegramId: user.telegramId,
         deviceLimit: subscription.deviceLimit,
-        flow: this.xuiClientFlow,
+        flow,
       });
       const updated = await this.prisma.subscription.update({
         where: { id: subscription.id },
@@ -92,8 +105,11 @@ export class SubscriptionService {
       return { subscription: updated, expiresAt: repaired.expiresAt, enabled: repaired.enabled };
     }
 
-    if (client.flow !== this.xuiClientFlow) {
-      await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { flow: this.xuiClientFlow });
+    const desiredFlow = await this.resolveFlowForInbound(subscription.xuiInboundId);
+    const currentFlow = (client.flow ?? "").trim();
+    const nextFlow = (desiredFlow ?? "").trim();
+    if (currentFlow !== nextFlow) {
+      await this.xui.updateClient(subscription.xuiInboundId, subscription.xuiClientUuid, { flow: nextFlow });
     }
 
     // 3x-ui is the source of truth for expiresAt.

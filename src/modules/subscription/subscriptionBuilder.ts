@@ -141,6 +141,11 @@ function buildVlessUrl(server: SubscriptionServer): string {
     if (server.template.wsPath) params.set("path", server.template.wsPath);
     if (server.template.wsHost) params.set("host", server.template.wsHost);
   }
+  if (server.template.network === "xhttp") {
+    if (server.template.xhttpPath) params.set("path", server.template.xhttpPath);
+    if (server.template.xhttpHost) params.set("host", server.template.xhttpHost);
+    if (server.template.xhttpMode) params.set("mode", server.template.xhttpMode);
+  }
   if (server.template.network === "grpc" && server.template.grpcServiceName) {
     params.set("serviceName", server.template.grpcServiceName);
   }

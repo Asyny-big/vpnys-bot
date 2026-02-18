@@ -27,7 +27,7 @@ export type ThreeXUiClientInfo = Readonly<{
 export type VlessRealityTemplate = Readonly<{
   protocol: "vless";
   port: number;
-  network: "tcp" | "ws" | "grpc";
+  network: "tcp" | "ws" | "grpc" | "xhttp";
   security: "reality";
   sni: string;
   publicKey: string;
@@ -39,6 +39,9 @@ export type VlessRealityTemplate = Readonly<{
   wsPath?: string;
   wsHost?: string;
   grpcServiceName?: string;
+  xhttpPath?: string;
+  xhttpHost?: string;
+  xhttpMode?: string;
 }>;
 
 type ThreeXUiServiceOptions = Readonly<{
@@ -96,9 +99,9 @@ export class ThreeXUiService {
     }
 
     const stream = this.parseJsonMaybe(inbound?.streamSettings);
-    const networkRaw = String(stream?.network ?? "tcp");
+    const networkRaw = String(stream?.network ?? "tcp").toLowerCase();
     const network =
-      networkRaw === "tcp" || networkRaw === "ws" || networkRaw === "grpc"
+      networkRaw === "tcp" || networkRaw === "ws" || networkRaw === "grpc" || networkRaw === "xhttp"
         ? networkRaw
         : "tcp";
 
@@ -182,6 +185,15 @@ export class ThreeXUiService {
         ? grpcServiceNameRaw.trim()
         : undefined;
 
+    const xhttpSettings = (stream?.xhttpSettings ?? stream?.splitHttpSettings ?? stream?.splitHTTPSettings ?? null) as any;
+    const xhttpPathRaw = (xhttpSettings?.path ?? "") as any;
+    const xhttpPath = typeof xhttpPathRaw === "string" && xhttpPathRaw.trim().length ? xhttpPathRaw.trim() : undefined;
+    const xhttpHostCandidate = xhttpSettings?.host ?? xhttpSettings?.headers?.Host ?? xhttpSettings?.headers?.host ?? "";
+    const xhttpHostRaw = Array.isArray(xhttpHostCandidate) ? xhttpHostCandidate[0] : xhttpHostCandidate;
+    const xhttpHost = typeof xhttpHostRaw === "string" && xhttpHostRaw.trim().length ? xhttpHostRaw.trim() : undefined;
+    const xhttpModeRaw = (xhttpSettings?.mode ?? "") as any;
+    const xhttpMode = typeof xhttpModeRaw === "string" && xhttpModeRaw.trim().length ? xhttpModeRaw.trim() : undefined;
+
     const value: VlessRealityTemplate = {
       protocol: "vless",
       port,
@@ -197,6 +209,9 @@ export class ThreeXUiService {
       ...(wsPath ? { wsPath } : {}),
       ...(wsHost ? { wsHost } : {}),
       ...(grpcServiceName ? { grpcServiceName } : {}),
+      ...(xhttpPath ? { xhttpPath } : {}),
+      ...(xhttpHost ? { xhttpHost } : {}),
+      ...(xhttpMode ? { xhttpMode } : {}),
     };
 
     this.vlessRealityTemplateCache.set(inboundId, { fetchedAt: Date.now(), value });
