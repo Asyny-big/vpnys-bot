@@ -989,7 +989,7 @@ export async function registerSubscriptionRoutes(
             const template = await deps.xui.getVlessRealityTemplate(state.subscription.xuiInboundId);
             return {
               name: "LisVPN",
-              host: hostnameFromUrl(deps.backendPublicUrl),
+              host: template.endpointHost ?? hostnameFromUrl(deps.backendPublicUrl),
               uuid: state.subscription.xuiClientUuid,
               flow: template.network === "tcp" && template.security === "reality" ? xuiClientFlow : undefined,
               template,

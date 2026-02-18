@@ -37,7 +37,13 @@ async function main(): Promise<void> {
     username: env.xuiUsername,
     password: env.xuiPassword,
   });
-  const xui = new ThreeXUiService(xuiApi, { enforceIpLimit: env.xuiEnforceIpLimit });
+  const xui = new ThreeXUiService(xuiApi, {
+    enforceIpLimit: env.xuiEnforceIpLimit,
+    defaultPublicHost: env.xuiPublicHost,
+    wsTlsPublicPort: env.xuiWsTlsPublicPort,
+    publicHostByInboundId: env.xuiPublicHostByInboundId,
+    publicHostByRemark: env.xuiPublicHostByRemark,
+  });
 
   const subscriptions = new SubscriptionService(prisma, xui, env.xuiInboundId, env.xuiClientFlow);
   const bans = new BanService(prisma);

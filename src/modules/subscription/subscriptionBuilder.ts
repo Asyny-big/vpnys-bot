@@ -132,7 +132,7 @@ function buildVlessUrl(server: SubscriptionServer): string {
     if (server.template.shortId) params.set("sid", server.template.shortId);
     if (server.template.spiderX) params.set("spx", server.template.spiderX);
   } else if (server.template.security === "tls") {
-    if (server.template.sni) params.set("sni", server.template.sni);
+    params.set("sni", server.template.sni ?? server.host);
     if (server.template.fingerprint) params.set("fp", server.template.fingerprint);
     if (server.template.alpn) params.set("alpn", server.template.alpn);
   }
@@ -144,7 +144,7 @@ function buildVlessUrl(server: SubscriptionServer): string {
   }
   if (server.template.network === "ws") {
     if (server.template.wsPath) params.set("path", server.template.wsPath);
-    if (server.template.wsHost) params.set("host", server.template.wsHost);
+    params.set("host", server.template.wsHost ?? server.host);
   }
   if (server.template.network === "xhttp") {
     if (server.template.xhttpPath) params.set("path", server.template.xhttpPath);

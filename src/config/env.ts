@@ -29,6 +29,10 @@ type Env = Readonly<{
   xuiInboundId: number;
   xuiClientFlow?: string;
   xuiEnforceIpLimit: boolean;
+  xuiPublicHost?: string;
+  xuiWsTlsPublicPort?: number;
+  xuiPublicHostByInboundId: ReadonlyMap<number, string>;
+  xuiPublicHostByRemark: ReadonlyMap<string, string>;
 
   webhookToken: string;
 
@@ -124,6 +128,55 @@ function ensureUrl(name: string, value: string): string {
   return value;
 }
 
+function ensureHostname(name: string, value: string): string {
+  const raw = value.trim();
+  if (!raw.length) throw new Error(`Invalid hostname env ${name}: ${value}`);
+  try {
+    if (/^[a-z][a-z0-9+.-]*:\/\//i.test(raw)) return new URL(raw).hostname;
+    return new URL(`https://${raw}`).hostname;
+  } catch {
+    throw new Error(`Invalid hostname env ${name}: ${value}`);
+  }
+}
+
+function parseHostMapJson(name: string): ReadonlyMap<string, string> {
+  const raw = optional(name);
+  if (!raw?.trim().length) return new Map<string, string>();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`${name} must be a JSON object`);
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`${name} must be a JSON object`);
+  }
+
+  const out = new Map<string, string>();
+  for (const [keyRaw, value] of Object.entries(parsed as Record<string, unknown>)) {
+    const key = keyRaw.trim();
+    if (!key.length) continue;
+    if (typeof value !== "string" || !value.trim().length) {
+      throw new Error(`${name} key "${key}" must map to a non-empty hostname string`);
+    }
+    out.set(key, ensureHostname(name, value));
+  }
+  return out;
+}
+
+function parseInboundHostMapJson(name: string): ReadonlyMap<number, string> {
+  const raw = parseHostMapJson(name);
+  const out = new Map<number, string>();
+  for (const [key, host] of raw.entries()) {
+    if (!/^\d+$/.test(key)) throw new Error(`${name} key "${key}" must be a positive integer inbound id`);
+    const id = Number(key);
+    if (!Number.isInteger(id) || id <= 0) throw new Error(`${name} key "${key}" must be a positive integer inbound id`);
+    out.set(id, host);
+  }
+  return out;
+}
+
 function ensureXuiLocalhost(baseUrl: string): void {
   const url = new URL(baseUrl);
   const host = url.hostname.toLowerCase();
@@ -200,6 +253,15 @@ export function loadEnv(): Env {
     }
   }
 
+  const xuiPublicHostRaw = optional("XUI_PUBLIC_HOST");
+  const xuiPublicHost = xuiPublicHostRaw ? ensureHostname("XUI_PUBLIC_HOST", xuiPublicHostRaw) : undefined;
+  const xuiWsTlsPublicPort = optionalPositiveInt("XUI_WS_TLS_PUBLIC_PORT");
+  if (xuiWsTlsPublicPort !== undefined && xuiWsTlsPublicPort > 65535) {
+    throw new Error(`XUI_WS_TLS_PUBLIC_PORT must be 1..65535 (got: ${xuiWsTlsPublicPort})`);
+  }
+  const xuiPublicHostByInboundId = parseInboundHostMapJson("XUI_PUBLIC_HOST_BY_INBOUND_JSON");
+  const xuiPublicHostByRemark = parseHostMapJson("XUI_PUBLIC_HOST_BY_REMARK_JSON");
+
   return {
     nodeEnv: nodeEnvRaw,
     logLevel,
@@ -230,6 +292,10 @@ export function loadEnv(): Env {
     xuiEnforceIpLimit: process.env.XUI_ENFORCE_IP_LIMIT
       ? asBoolean("XUI_ENFORCE_IP_LIMIT", process.env.XUI_ENFORCE_IP_LIMIT)
       : false,
+    xuiPublicHost,
+    xuiWsTlsPublicPort,
+    xuiPublicHostByInboundId,
+    xuiPublicHostByRemark,
 
     webhookToken: required("WEBHOOK_TOKEN"),
 

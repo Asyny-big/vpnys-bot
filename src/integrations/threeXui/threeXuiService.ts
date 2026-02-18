@@ -29,6 +29,7 @@ export type VlessRealityTemplate = Readonly<{
   port: number;
   network: "tcp" | "ws" | "grpc" | "xhttp";
   security: "reality" | "tls" | "none";
+  endpointHost?: string;
   sni?: string;
   publicKey?: string;
   shortId?: string;
@@ -46,6 +47,10 @@ export type VlessRealityTemplate = Readonly<{
 
 type ThreeXUiServiceOptions = Readonly<{
   enforceIpLimit?: boolean;
+  defaultPublicHost?: string;
+  wsTlsPublicPort?: number;
+  publicHostByInboundId?: ReadonlyMap<number, string>;
+  publicHostByRemark?: ReadonlyMap<string, string>;
 }>;
 
 export class ThreeXUiService {
@@ -54,11 +59,23 @@ export class ThreeXUiService {
     options: ThreeXUiServiceOptions = {},
   ) {
     this.enforceIpLimit = options.enforceIpLimit === true;
+    this.defaultPublicHost = typeof options.defaultPublicHost === "string" && options.defaultPublicHost.trim().length
+      ? options.defaultPublicHost.trim()
+      : undefined;
+    this.wsTlsPublicPort = Number.isInteger(options.wsTlsPublicPort) && (options.wsTlsPublicPort as number) > 0
+      ? (options.wsTlsPublicPort as number)
+      : 443;
+    this.publicHostByInboundId = options.publicHostByInboundId ?? new Map<number, string>();
+    this.publicHostByRemark = options.publicHostByRemark ?? new Map<string, string>();
   }
 
   private readonly vlessRealityTemplateCache = new Map<number, { fetchedAt: number; value: VlessRealityTemplate }>();
   private readonly vlessRealityTemplateTtlMs = 10 * 60 * 1000;
   private readonly enforceIpLimit: boolean;
+  private readonly defaultPublicHost?: string;
+  private readonly wsTlsPublicPort: number;
+  private readonly publicHostByInboundId: ReadonlyMap<number, string>;
+  private readonly publicHostByRemark: ReadonlyMap<string, string>;
 
   telegramEmail(telegramId: string): string {
     return `tg:${telegramId}`;
@@ -81,6 +98,26 @@ export class ThreeXUiService {
     } catch {
       return null;
     }
+  }
+
+  private resolvePublicHost(params: { inboundId: number; remark?: string; wsHost?: string; sni?: string }): string | undefined {
+    const fromInbound = this.publicHostByInboundId.get(params.inboundId)?.trim();
+    if (fromInbound) return fromInbound;
+
+    const remark = (params.remark ?? "").trim();
+    const fromRemark = remark.length ? this.publicHostByRemark.get(remark)?.trim() : undefined;
+    if (fromRemark) return fromRemark;
+
+    const fromDefault = this.defaultPublicHost?.trim();
+    if (fromDefault) return fromDefault;
+
+    const fromPanelWsHost = params.wsHost?.trim();
+    if (fromPanelWsHost) return fromPanelWsHost;
+
+    const fromSni = params.sni?.trim();
+    if (fromSni) return fromSni;
+
+    return undefined;
   }
 
   async getVlessRealityTemplate(inboundId: number): Promise<VlessRealityTemplate> {
@@ -203,20 +240,26 @@ export class ThreeXUiService {
     const xhttpModeRaw = (xhttpSettings?.mode ?? "") as any;
     const xhttpMode = typeof xhttpModeRaw === "string" && xhttpModeRaw.trim().length ? xhttpModeRaw.trim() : undefined;
 
+    const remark = typeof inbound?.remark === "string" ? inbound.remark.trim() : undefined;
+    const publicHost = this.resolvePublicHost({ inboundId, remark, wsHost, sni });
+    const wsBehindTlsProxy = network === "ws" && security === "none";
+    const endpointHost = network === "ws" ? publicHost : undefined;
+
     const value: VlessRealityTemplate = {
       protocol: "vless",
-      port,
+      port: wsBehindTlsProxy ? this.wsTlsPublicPort : port,
       network,
-      security,
-      ...(sni ? { sni } : {}),
+      security: wsBehindTlsProxy ? "tls" : security,
+      ...(endpointHost ? { endpointHost } : {}),
+      ...(wsBehindTlsProxy ? { sni: publicHost ?? sni } : sni ? { sni } : {}),
       ...(publicKey ? { publicKey } : {}),
       ...(shortId ? { shortId } : {}),
       ...(spiderX ? { spiderX } : {}),
       ...(fingerprint ? { fingerprint } : {}),
-      ...(alpn ? { alpn } : {}),
+      ...(wsBehindTlsProxy ? { alpn: alpn ?? "http/1.1" } : alpn ? { alpn } : {}),
       ...(tcpHeaderType ? { tcpHeaderType } : {}),
       ...(wsPath ? { wsPath } : {}),
-      ...(wsHost ? { wsHost } : {}),
+      ...(wsBehindTlsProxy ? { wsHost: publicHost ?? wsHost } : wsHost ? { wsHost } : {}),
       ...(grpcServiceName ? { grpcServiceName } : {}),
       ...(xhttpPath ? { xhttpPath } : {}),
       ...(xhttpHost ? { xhttpHost } : {}),
