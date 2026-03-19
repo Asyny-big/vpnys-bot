@@ -228,9 +228,14 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
     }
   }
 
-  lines.push(...MOBILE_BYPASS_BLOCK);
+  if ((params.mobileBypassUrls ?? []).some((u) => u.trim().length > 0)) {
+    lines.push(...MOBILE_BYPASS_BLOCK);
+  }
 
   const mobileUrls = (params.mobileBypassUrls ?? []).map((u) => u.trim()).filter(Boolean);
+  if (mobileUrls.length === 0) {
+    return { headers, body: `${lines.join("\n")}\n` };
+  }
   for (let i = 0; i < mobileUrls.length; i++) {
     lines.push(withUrlName(mobileUrls[i]!, `🌍 Обход №${i + 1}`));
   }

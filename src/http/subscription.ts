@@ -52,7 +52,7 @@ export async function registerSubscriptionRoutes(
     backendPublicUrl: string;
     telegramBotUrl: string;
     fastServerUrls: ReadonlyArray<{ displayName: string; configUrl: string }>;
-    getMobileBypass: () => ReadonlyArray<string>;
+    getMobileBypass: () => Promise<ReadonlyArray<string>>;
     xuiInboundId: number;
     xuiClientFlow?: string;
   }>,
@@ -1006,7 +1006,7 @@ export async function registerSubscriptionRoutes(
 
       const built = buildSubscription(
         { enabled: state.enabled, expiresAt: effectiveExpiresAt, telegramBotUrl: deps.telegramBotUrl },
-        { primaryServer, fastServerUrls: deps.fastServerUrls, mobileBypassUrls: deps.getMobileBypass() },
+        { primaryServer, fastServerUrls: deps.fastServerUrls, mobileBypassUrls: await deps.getMobileBypass() },
       );
 
       for (const [key, value] of Object.entries(built.headers)) reply.header(key, value);
