@@ -11,8 +11,10 @@ export interface DeviceInfo {
   rawUserAgent: string;
   /** Source of model info: 'ua' (User-Agent), 'hints' (Client Hints), or null */
   modelSource: "ua" | "hints" | null;
-  /** Device fingerprint hash for identifying unique devices */
+  /** Canonical fingerprint used by the backend */
   fingerprint: string;
+  /** Legacy-compatible fingerprints accepted during lookup/migration */
+  fingerprintCandidates: string[];
 }
 
 /**
@@ -36,12 +38,19 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
   const ua = userAgent?.trim() ?? "";
 
   if (!ua) {
-    return { 
-      platform: "Unknown", 
-      model: null, 
-      rawUserAgent: "", 
+    const fingerprintSet = buildFingerprintSet({
+      ua,
+      platform: "Unknown",
+      hints: {},
+    });
+
+    return {
+      platform: "Unknown",
+      model: null,
+      rawUserAgent: "",
       modelSource: null,
-      fingerprint: generateFingerprint({ ua: "", ip: null, hints: {} }),
+      fingerprint: fingerprintSet.canonical,
+      fingerprintCandidates: fingerprintSet.candidates,
     };
   }
 
@@ -88,12 +97,19 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
     platform = "Linux";
   }
 
-  return { 
-    platform, 
-    model, 
-    rawUserAgent: ua, 
+  const fingerprintSet = buildFingerprintSet({
+    ua,
+    platform,
+    hints: {},
+  });
+
+  return {
+    platform,
+    model,
+    rawUserAgent: ua,
     modelSource: model ? "ua" : null,
-    fingerprint: generateFingerprint({ ua, ip: null, hints: {} }),
+    fingerprint: fingerprintSet.canonical,
+    fingerprintCandidates: fingerprintSet.candidates,
   };
 }
 
@@ -115,11 +131,13 @@ function isGenericAndroidModel(model: string): boolean {
 /**
  * Parse device info with Client Hints support (modern browsers).
  * Client Hints provide more accurate device info on Android 10+.
- * 
+ *
  * To enable Client Hints, server should send response header:
  * Accept-CH: Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version
  */
 export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: string): DeviceInfo {
+  void clientIp;
+
   // First, parse standard User-Agent
   const baseInfo = parseUserAgent(headers["user-agent"]);
 
@@ -140,10 +158,9 @@ export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: str
     baseInfo.modelSource = "hints";
   }
 
-  // Regenerate fingerprint with IP and hints
-  baseInfo.fingerprint = generateFingerprint({
+  const fingerprintSet = buildFingerprintSet({
     ua: baseInfo.rawUserAgent,
-    ip: clientIp ?? null,
+    platform: baseInfo.platform,
     hints: {
       model: hintModel,
       platform: hintPlatform,
@@ -151,20 +168,61 @@ export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: str
       mobile: headers["sec-ch-ua-mobile"],
     },
   });
+  baseInfo.fingerprint = fingerprintSet.canonical;
+  baseInfo.fingerprintCandidates = fingerprintSet.candidates;
 
   return baseInfo;
 }
 
-/**
- * Generate device fingerprint from available data.
- * WARNING: Not 100% reliable - same device can have different fingerprints
- * (e.g., different browsers). Use only for soft limits, not security.
- * 
- * ВАЖНО: IP НЕ используется в fingerprint, т.к. IP меняется при подключении VPN.
- */
-function generateFingerprint(data: {
+function buildFingerprintSet(data: {
   ua: string;
-  ip: string | null;
+  platform: DeviceInfo["platform"];
+  hints: {
+    model?: string;
+    platform?: string;
+    platformVersion?: string;
+    mobile?: string;
+  };
+}): { canonical: string; candidates: string[] } {
+  const canonical = generateStableFingerprint({
+    ua: data.ua,
+    platform: data.platform,
+  });
+  const legacyCurrent = generateLegacyFingerprint({
+    ua: data.ua,
+    hints: data.hints,
+  });
+  const legacyUaOnly = generateLegacyFingerprint({
+    ua: data.ua,
+    hints: {},
+  });
+
+  return {
+    canonical,
+    candidates: dedupeFingerprints([canonical, legacyCurrent, legacyUaOnly]),
+  };
+}
+
+/**
+ * Canonical fingerprint must stay stable when Client Hints appear/disappear
+ * and when Chrome/WebView updates only change version numbers.
+ */
+function generateStableFingerprint(data: {
+  ua: string;
+  platform: DeviceInfo["platform"];
+}): string {
+  const parts: string[] = [
+    normalizeUserAgentForFingerprint(data.ua),
+    data.platform || "Unknown",
+  ];
+  return shortSha256(parts.join("|"));
+}
+
+/**
+ * Legacy fingerprint kept for backward-compatible lookup of already registered devices.
+ */
+function generateLegacyFingerprint(data: {
+  ua: string;
   hints: {
     model?: string;
     platform?: string;
@@ -172,7 +230,6 @@ function generateFingerprint(data: {
     mobile?: string;
   };
 }): string {
-  // Combine available signals (БЕЗ IP - IP меняется при VPN)
   const parts: string[] = [
     data.ua || "unknown",
     data.hints.model || "",
@@ -180,12 +237,24 @@ function generateFingerprint(data: {
     data.hints.platformVersion || "",
     data.hints.mobile || "",
   ];
+  return shortSha256(parts.join("|"));
+}
 
-  // НЕ добавляем IP - при активном VPN IP постоянно меняется,
-  // что приводит к регистрации одного физического устройства как нескольких.
+function normalizeUserAgentForFingerprint(userAgent: string): string {
+  return (userAgent || "unknown")
+    .trim()
+    .toLowerCase()
+    .replace(/\b[a-z]{2}[-_][a-z]{2}\b/g, "{locale}")
+    .replace(/\d+(?:[._]\d+)+/g, "#")
+    .replace(/\s+/g, " ");
+}
 
-  const combined = parts.join("|");
-  return createHash("sha256").update(combined).digest("hex").slice(0, 16);
+function shortSha256(value: string): string {
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
+}
+
+function dedupeFingerprints(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.length > 0)));
 }
 
 /**
@@ -202,7 +271,10 @@ export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string, headers?
   console.log(`${prefix}PLATFORM: ${deviceInfo.platform}`);
   console.log(`${prefix}MODEL: ${deviceInfo.model ?? "Unknown"}${deviceInfo.modelSource === "hints" ? " (from Client Hints)" : ""}`);
   console.log(`${prefix}FINGERPRINT: ${deviceInfo.fingerprint}`);
-  
+  if (deviceInfo.fingerprintCandidates.length > 1) {
+    console.log(`${prefix}FINGERPRINT_CANDIDATES: ${deviceInfo.fingerprintCandidates.join(", ")}`);
+  }
+
   // Log Client Hints if present (for debugging)
   if (headers) {
     const hints: string[] = [];
@@ -210,7 +282,7 @@ export function logDeviceInfo(deviceInfo: DeviceInfo, context?: string, headers?
     if (headers["sec-ch-ua-platform"]) hints.push(`platform=${headers["sec-ch-ua-platform"]}`);
     if (headers["sec-ch-ua-platform-version"]) hints.push(`version=${headers["sec-ch-ua-platform-version"]}`);
     if (headers["sec-ch-ua-mobile"]) hints.push(`mobile=${headers["sec-ch-ua-mobile"]}`);
-    
+
     if (hints.length > 0) {
       console.log(`${prefix}CLIENT_HINTS: ${hints.join(", ")}`);
     }
@@ -230,7 +302,7 @@ export function detectAndLogDevice(
   const info = typeof headers === "string" || headers === null || headers === undefined
     ? parseUserAgent(headers)
     : parseWithClientHints(headers, clientIp);
-  
+
   logDeviceInfo(info, context, typeof headers === "object" && headers !== null ? headers : undefined);
   return info;
 }

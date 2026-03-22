@@ -1,4 +1,4 @@
-import type { PrismaClient, DeviceConfig } from "@prisma/client";
+import type { PrismaClient, DeviceConfig, Prisma } from "@prisma/client";
 import type { DeviceInfo } from "../../utils/deviceDetect";
 import type { ThreeXUiService } from "../../integrations/threeXui/threeXuiService";
 import { randomUUID } from "node:crypto";
@@ -59,7 +59,7 @@ export class DeviceService {
     // deviceLimit из подписки - это source of truth
     // Если подписки нет, используем базовый лимит 1
     const totalLimit = subscription?.deviceLimit ?? 1;
-    
+
     // extraSlots вычисляем как разницу от базового лимита (для отображения)
     const baseLimit = 1;
     const extraSlots = Math.max(0, totalLimit - baseLimit);
@@ -75,13 +75,13 @@ export class DeviceService {
 
   /**
    * Автоматическая регистрация устройства при первом подключении.
-   * 
+   *
    * Логика:
-   * 1. Если устройство уже существует (по fingerprint) → обновить lastSeenAt, разрешить
-   * 2. Если новое устройство и есть свободный слот → создать, разрешить
-   * 3. Если новое устройство и слота нет → отказать (LIMIT_REACHED)
-   * 
-   * ⚠️ ВАЖНО: fingerprint НЕ включает IP (IP меняется при VPN).
+   * 1. Если устройство уже существует (по fingerprint) -> обновить lastSeenAt, разрешить
+   * 2. Если новое устройство и есть свободный слот -> создать, разрешить
+   * 3. Если новое устройство и слота нет -> отказать (LIMIT_REACHED)
+   *
+   * Важно: lookup идет по каноническому fingerprint и по legacy aliases.
    * Source of truth — БД.
    */
   async registerDevice(
@@ -89,66 +89,135 @@ export class DeviceService {
     deviceInfo: DeviceInfo,
     subscriptionActive: boolean,
   ): Promise<RegisterDeviceResult> {
-    // Check if subscription is active
     if (!subscriptionActive) {
-      // Clear all devices when subscription expires
       await this.clearAllDevices(userId);
 
       return {
         success: false,
-        error: "Подписка истекла. Продлите подписку для подключения устройств.",
+        error: "Подписка истекла. Продлите подписку для подключения устройства.",
         errorCode: "SUBSCRIPTION_EXPIRED",
       };
     }
 
-    // Check if device already registered (by fingerprint)
-    const existing = await this.prisma.deviceConfig.findUnique({
-      where: {
-        userId_fingerprint: {
-          userId,
-          fingerprint: deviceInfo.fingerprint,
-        },
-      },
-    });
+    const fingerprintCandidates = this.getFingerprintCandidates(deviceInfo);
+    const now = new Date();
 
-    if (existing) {
-      // Update lastSeenAt
-      const updated = await this.prisma.deviceConfig.update({
-        where: { id: existing.id },
-        data: { lastSeenAt: new Date() },
+    return await this.prisma.$transaction(async (tx) => {
+      const existing = await tx.deviceConfig.findFirst({
+        where: {
+          userId,
+          fingerprint: { in: fingerprintCandidates },
+        },
+        orderBy: { lastSeenAt: "desc" },
       });
 
-      return { success: true, device: updated };
-    }
+      if (existing) {
+        const updated = await this.touchExistingDevice(tx, existing, deviceInfo, now);
+        return { success: true, device: updated };
+      }
 
-    // Check device limits
-    const limits = await this.getDeviceLimits(userId);
+      const subscription = await tx.subscription.findUnique({
+        where: { userId },
+        select: { deviceLimit: true },
+      });
+      const totalLimit = subscription?.deviceLimit ?? 1;
+      const currentDevices = await tx.deviceConfig.count({
+        where: { userId },
+      });
 
-    if (limits.availableSlots <= 0) {
-      return {
-        success: false,
-        error: `Достигнут лимит устройств (${limits.totalLimit}). Удалите старое устройство или купите дополнительный слот.`,
-        errorCode: "LIMIT_REACHED",
-      };
-    }
+      if (currentDevices >= totalLimit) {
+        return {
+          success: false,
+          error: `Достигнут лимит устройств (${totalLimit}). Удалите старое устройство или купите дополнительный слот.`,
+          errorCode: "LIMIT_REACHED",
+        };
+      }
 
-    // Generate device name
-    const deviceName = this.generateDeviceName(deviceInfo, limits.currentDevices + 1);
+      const deviceName = this.generateDeviceName(deviceInfo, currentDevices + 1);
 
-    // Create new device
-    const device = await this.prisma.deviceConfig.create({
-      data: {
-        userId,
-        fingerprint: deviceInfo.fingerprint,
-        deviceName,
-        platform: deviceInfo.platform,
-        model: deviceInfo.model,
-        firstSeenAt: new Date(),
-        lastSeenAt: new Date(),
-      },
+      try {
+        const device = await tx.deviceConfig.create({
+          data: {
+            userId,
+            fingerprint: deviceInfo.fingerprint,
+            deviceName,
+            platform: deviceInfo.platform,
+            model: deviceInfo.model,
+            firstSeenAt: now,
+            lastSeenAt: now,
+          },
+        });
+
+        return { success: true, device };
+      } catch (err: any) {
+        if (err?.code === "P2002") {
+          const reread = await tx.deviceConfig.findFirst({
+            where: {
+              userId,
+              fingerprint: { in: fingerprintCandidates },
+            },
+            orderBy: { lastSeenAt: "desc" },
+          });
+
+          if (reread) {
+            const updated = await this.touchExistingDevice(tx, reread, deviceInfo, now);
+            return { success: true, device: updated };
+          }
+        }
+
+        throw err;
+      }
     });
+  }
 
-    return { success: true, device };
+  private getFingerprintCandidates(deviceInfo: DeviceInfo): string[] {
+    return Array.from(
+      new Set(
+        [deviceInfo.fingerprint, ...(deviceInfo.fingerprintCandidates ?? [])]
+          .map((value) => value?.trim() ?? "")
+          .filter((value) => value.length > 0),
+      ),
+    );
+  }
+
+  private async touchExistingDevice(
+    tx: Prisma.TransactionClient,
+    existing: DeviceConfig,
+    deviceInfo: DeviceInfo,
+    now: Date,
+  ): Promise<DeviceConfig> {
+    const data: Prisma.DeviceConfigUpdateInput = {
+      lastSeenAt: now,
+      platform: deviceInfo.platform,
+    };
+
+    if (deviceInfo.model) {
+      data.model = deviceInfo.model;
+    }
+
+    if (existing.fingerprint !== deviceInfo.fingerprint) {
+      data.fingerprint = deviceInfo.fingerprint;
+    }
+
+    try {
+      return await tx.deviceConfig.update({
+        where: { id: existing.id },
+        data,
+      });
+    } catch (err: any) {
+      if (err?.code === "P2002" && existing.fingerprint !== deviceInfo.fingerprint) {
+        return await tx.deviceConfig.update({
+          where: { id: existing.id },
+          data: {
+            lastSeenAt: now,
+            platform: deviceInfo.platform,
+            ...(deviceInfo.model ? { model: deviceInfo.model } : {}),
+          },
+        });
+      }
+
+      throw err;
+    }
   }
 
   /**
@@ -156,16 +225,15 @@ export class DeviceService {
    */
   private generateDeviceName(deviceInfo: DeviceInfo, deviceNumber: number): string {
     const platformEmoji: Record<string, string> = {
-      Android: "📱",
-      iOS: "📱",
-      Windows: "💻",
-      macOS: "💻",
-      Linux: "🐧",
-      Unknown: "🔧",
+      Android: "рџ“±",
+      iOS: "рџ“±",
+      Windows: "рџ’»",
+      macOS: "рџ’»",
+      Linux: "рџђ§",
+      Unknown: "рџ”§",
     };
 
-    const emoji = platformEmoji[deviceInfo.platform] ?? "🔧";
-    const model = deviceInfo.model ?? deviceInfo.platform;
+    const emoji = platformEmoji[deviceInfo.platform] ?? "рџ”§";
 
     // If we have a real model name, use it
     if (deviceInfo.model && deviceInfo.model !== "iPhone" && deviceInfo.model !== "iPad") {
@@ -188,12 +256,11 @@ export class DeviceService {
 
   /**
    * Remove a device.
-   * ✅ ИСПРАВЛЕНО: Удаляет устройство из БД И соответствующий client из 3x-ui.
+   * Удаляет устройство из БД и соответствующий client из 3x-ui.
    */
   async removeDevice(userId: string, deviceId: string): Promise<boolean> {
     try {
-      // Получить clientId перед удалением
-      const device = await this.prisma.deviceConfig.findUnique({
+      const device = await this.prisma.deviceConfig.findFirst({
         where: { id: deviceId, userId },
       });
 
@@ -201,20 +268,14 @@ export class DeviceService {
         return false;
       }
 
-      // Удалить из БД (source of truth)
       await this.prisma.deviceConfig.delete({
-        where: {
-          id: deviceId,
-          userId, // Ensure user owns this device
-        },
+        where: { id: deviceId },
       });
 
-      // Удалить client из 3x-ui (если есть clientId и настроена интеграция)
       if (device.clientId && this.xui && this.xuiInboundId !== undefined) {
         try {
           await this.xui.deleteClient(this.xuiInboundId, device.clientId);
         } catch (err) {
-          // Логируем, но не падаем - БД уже обновлена (source of truth)
           console.error(`Failed to delete client ${device.clientId} from 3x-ui:`, err);
         }
       }
@@ -230,13 +291,16 @@ export class DeviceService {
    */
   async renameDevice(userId: string, deviceId: string, newName: string): Promise<boolean> {
     try {
+      const existing = await this.prisma.deviceConfig.findFirst({
+        where: { id: deviceId, userId },
+        select: { id: true },
+      });
+      if (!existing) return false;
+
       await this.prisma.deviceConfig.update({
-        where: {
-          id: deviceId,
-          userId,
-        },
+        where: { id: existing.id },
         data: {
-          deviceName: newName.trim().slice(0, 100), // Limit length
+          deviceName: newName.trim().slice(0, 100),
         },
       });
       return true;
@@ -247,28 +311,24 @@ export class DeviceService {
 
   /**
    * Clear all devices for a user (called when subscription expires).
-   * ✅ ИСПРАВЛЕНО: Удаляет все устройства из БД И все clients из 3x-ui.
+   * Удаляет все устройства из БД и все clients из 3x-ui.
    */
   async clearAllDevices(userId: string): Promise<number> {
-    // Получить все устройства с clientId
     const devices = await this.prisma.deviceConfig.findMany({
       where: { userId },
       select: { id: true, clientId: true },
     });
 
-    // Удалить из БД (source of truth)
     const result = await this.prisma.deviceConfig.deleteMany({
       where: { userId },
     });
 
-    // Удалить все clients из 3x-ui
     if (this.xui && this.xuiInboundId !== undefined) {
       for (const device of devices) {
         if (device.clientId) {
           try {
             await this.xui.deleteClient(this.xuiInboundId, device.clientId);
           } catch (err) {
-            // Логируем, но продолжаем - БД уже обновлена
             console.error(`Failed to delete client ${device.clientId} from 3x-ui:`, err);
           }
         }
@@ -295,20 +355,12 @@ export class DeviceService {
   /**
    * Create a new device slot for user.
    * This is the ONLY way to add devices - explicit user action.
-   * 
-   * ✅ Правильный flow:
-   * 1. Пользователь нажимает "Добавить устройство"
-   * 2. Генерируется уникальный clientId (UUID)
-   * 3. Создается запись в БД
-   * 4. Создается соответствующий client в 3x-ui
-   * 5. Пользователь получает ссылку для подключения этого конкретного устройства
    */
   async createDeviceSlot(
     userId: string,
     deviceName: string,
     deviceInfo: DeviceInfo,
   ): Promise<{ success: boolean; device?: DeviceConfig; error?: string; errorCode?: string }> {
-    // Check device limits
     const limits = await this.getDeviceLimits(userId);
 
     if (limits.availableSlots <= 0) {
@@ -319,10 +371,8 @@ export class DeviceService {
       };
     }
 
-    // Generate unique clientId for this device (VLESS client UUID)
     const clientId = randomUUID();
 
-    // Create device in DB
     try {
       const device = await this.prisma.deviceConfig.create({
         data: {
@@ -338,7 +388,7 @@ export class DeviceService {
       });
 
       return { success: true, device };
-    } catch (err: any) {
+    } catch {
       return {
         success: false,
         error: "Ошибка создания устройства",
