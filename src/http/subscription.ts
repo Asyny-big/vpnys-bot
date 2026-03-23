@@ -963,6 +963,25 @@ export async function registerSubscriptionRoutes(
           // ⚠️ ЛИМИТ ДОСТИГНУТ: возвращаем пустую подписку с уведомлением
           // Вместо 403 (который вызывает ошибку в клиентах) возвращаем 200 с пустым body
           // Уведомление отображается через заголовок "announce" в Happ/Hiddify
+          const registrationLog = {
+            userId: row.user.id,
+            subscriptionId: row.id,
+            fingerprint: deviceInfo.fingerprint,
+            fingerprintCandidateCount: deviceInfo.fingerprintCandidates.length,
+            normalizedModel: deviceInfo.normalizedModel,
+            matchStrategy: "matchStrategy" in registerResult ? registerResult.matchStrategy ?? null : null,
+            matchedDeviceId: "matchedDeviceId" in registerResult ? registerResult.matchedDeviceId ?? null : null,
+            currentDevices: "currentDevices" in registerResult ? registerResult.currentDevices ?? null : null,
+            totalLimit: "totalLimit" in registerResult ? registerResult.totalLimit ?? null : null,
+            collapsedDuplicates: "collapsedDuplicates" in registerResult ? registerResult.collapsedDuplicates ?? 0 : 0,
+          };
+
+          if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
+            req.log.warn(registrationLog, "Device registration hit hard limit in /sub/:token");
+          } else {
+            req.log.info(registrationLog, "Device registration evaluated in /sub/:token");
+          }
+
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
             const built = buildSubscription(
               { 

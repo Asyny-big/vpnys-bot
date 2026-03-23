@@ -8,6 +8,7 @@ import { createHash } from "node:crypto";
 export interface DeviceInfo {
   platform: "Android" | "iOS" | "Windows" | "macOS" | "Linux" | "Unknown";
   model: string | null;
+  normalizedModel: string | null;
   rawUserAgent: string;
   /** Source of model info: 'ua' (User-Agent), 'hints' (Client Hints), or null */
   modelSource: "ua" | "hints" | null;
@@ -41,12 +42,14 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
     const fingerprintSet = buildFingerprintSet({
       ua,
       platform: "Unknown",
+      model: null,
       hints: {},
     });
 
     return {
       platform: "Unknown",
       model: null,
+      normalizedModel: null,
       rawUserAgent: "",
       modelSource: null,
       fingerprint: fingerprintSet.canonical,
@@ -100,12 +103,14 @@ export function parseUserAgent(userAgent: string | undefined | null): DeviceInfo
   const fingerprintSet = buildFingerprintSet({
     ua,
     platform,
+    model,
     hints: {},
   });
 
   return {
     platform,
     model,
+    normalizedModel: normalizeDeviceModel(model),
     rawUserAgent: ua,
     modelSource: model ? "ua" : null,
     fingerprint: fingerprintSet.canonical,
@@ -153,14 +158,16 @@ export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: str
 
   // Try to get model from Client Hints (works on Android 10+ with Chrome)
   const hintModel = headers["sec-ch-ua-model"]?.replace(/"/g, "").trim();
-  if (hintModel && hintModel.length > 1) {
+  if (hintModel && hintModel.length > 1 && !isGenericAndroidModel(hintModel)) {
     baseInfo.model = hintModel;
+    baseInfo.normalizedModel = normalizeDeviceModel(hintModel);
     baseInfo.modelSource = "hints";
   }
 
   const fingerprintSet = buildFingerprintSet({
     ua: baseInfo.rawUserAgent,
     platform: baseInfo.platform,
+    model: baseInfo.model,
     hints: {
       model: hintModel,
       platform: hintPlatform,
@@ -177,6 +184,7 @@ export function parseWithClientHints(headers: ClientHintsHeaders, clientIp?: str
 function buildFingerprintSet(data: {
   ua: string;
   platform: DeviceInfo["platform"];
+  model: string | null;
   hints: {
     model?: string;
     platform?: string;
@@ -184,9 +192,14 @@ function buildFingerprintSet(data: {
     mobile?: string;
   };
 }): { canonical: string; candidates: string[] } {
-  const canonical = generateStableFingerprint({
+  const currentCanonical = generateStableFingerprint({
     ua: data.ua,
     platform: data.platform,
+  });
+  const canonical = generateCanonicalFingerprint({
+    ua: data.ua,
+    platform: data.platform,
+    model: data.model,
   });
   const legacyCurrent = generateLegacyFingerprint({
     ua: data.ua,
@@ -199,8 +212,24 @@ function buildFingerprintSet(data: {
 
   return {
     canonical,
-    candidates: dedupeFingerprints([canonical, legacyCurrent, legacyUaOnly]),
+    candidates: dedupeFingerprints([canonical, currentCanonical, legacyCurrent, legacyUaOnly]),
   };
+}
+
+function generateCanonicalFingerprint(data: {
+  ua: string;
+  platform: DeviceInfo["platform"];
+  model: string | null;
+}): string {
+  const normalizedModel = normalizeDeviceModel(data.model);
+  if (data.platform === "Android" && normalizedModel) {
+    return shortSha256(`android-model-v1|${data.platform}|${normalizedModel}`);
+  }
+
+  return generateStableFingerprint({
+    ua: data.ua,
+    platform: data.platform,
+  });
 }
 
 /**
@@ -247,6 +276,17 @@ function normalizeUserAgentForFingerprint(userAgent: string): string {
     .replace(/\b[a-z]{2}[-_][a-z]{2}\b/g, "{locale}")
     .replace(/\d+(?:[._]\d+)+/g, "#")
     .replace(/\s+/g, " ");
+}
+
+export function normalizeDeviceModel(model: string | undefined | null): string | null {
+  const normalized = (model ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return normalized.length > 0 ? normalized : null;
 }
 
 function shortSha256(value: string): string {
