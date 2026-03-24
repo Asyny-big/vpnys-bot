@@ -100,7 +100,7 @@ export class DeviceService {
         const fingerprintMatch = this.findFingerprintMatch(devices, fingerprintCandidates, deviceInfo.fingerprint);
         if (fingerprintMatch) {
           const updated = await this.touchExistingDevice(tx, fingerprintMatch.device, deviceInfo, now);
-          const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, deviceInfo);
+          const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, totalLimit);
           return {
             success: true,
             device: updated,
@@ -112,11 +112,28 @@ export class DeviceService {
           };
         }
 
+        const weakReuseMatch = currentDevices < totalLimit
+          ? this.findWeakPlatformMatch(devices, deviceInfo)
+          : null;
+        if (weakReuseMatch) {
+          const updated = await this.touchExistingDevice(tx, weakReuseMatch, deviceInfo, now);
+          const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, totalLimit);
+          return {
+            success: true,
+            device: updated,
+            matchStrategy: "heuristic",
+            collapsedDuplicates,
+            matchedDeviceId: updated.id,
+            currentDevices,
+            totalLimit,
+          };
+        }
+
         if (currentDevices >= totalLimit) {
           const heuristicMatch = this.findHeuristicMatch(devices, deviceInfo, totalLimit);
           if (heuristicMatch) {
             const updated = await this.touchExistingDevice(tx, heuristicMatch, deviceInfo, now);
-            const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, deviceInfo);
+            const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, totalLimit);
             return {
               success: true,
               device: updated,
@@ -354,8 +371,12 @@ export class DeviceService {
       return null;
     }
 
-    if (deviceInfo.normalizedModel) {
-      const sameModel = samePlatform.filter(
+    const incomingStrongIdentity = this.hasStrongDeviceIdentity(deviceInfo);
+    const samePlatformStrong = samePlatform.filter((device) => this.hasStrongStoredIdentity(device));
+    const samePlatformWeak = samePlatform.filter((device) => !this.hasStrongStoredIdentity(device));
+
+    if (incomingStrongIdentity) {
+      const sameModel = samePlatformStrong.filter(
         (device) => normalizeDeviceModel(device.model) === deviceInfo.normalizedModel,
       );
       if (sameModel.length > 0) {
@@ -363,15 +384,37 @@ export class DeviceService {
       }
     }
 
+    if (!incomingStrongIdentity) {
+      if (totalLimit === 1 && samePlatformStrong.length === 1) {
+        return samePlatformStrong[0] ?? null;
+      }
+
+      if (samePlatformWeak.length > 0) {
+        return samePlatformWeak[0] ?? null;
+      }
+    }
+
     if (totalLimit === 1 && samePlatform.length === 1) {
       const onlyDevice = samePlatform[0];
-      const existingNormalizedModel = normalizeDeviceModel(onlyDevice.model);
-      if (!deviceInfo.normalizedModel || !existingNormalizedModel) {
+      const existingStrongIdentity = this.hasStrongStoredIdentity(onlyDevice);
+      if (!incomingStrongIdentity || !existingStrongIdentity) {
         return onlyDevice;
       }
     }
 
     return null;
+  }
+
+  private findWeakPlatformMatch(devices: DeviceConfig[], deviceInfo: DeviceInfo): DeviceConfig | null {
+    if (this.hasStrongDeviceIdentity(deviceInfo)) {
+      return null;
+    }
+
+    const samePlatformWeak = devices.filter(
+      (device) => device.platform === deviceInfo.platform && !this.hasStrongStoredIdentity(device),
+    );
+
+    return samePlatformWeak[0] ?? null;
   }
 
   private async touchExistingDevice(
@@ -418,20 +461,34 @@ export class DeviceService {
     tx: Prisma.TransactionClient,
     retainedDevice: DeviceConfig,
     devices: DeviceConfig[],
-    deviceInfo: DeviceInfo,
+    totalLimit: number,
   ): Promise<number> {
-    const normalizedModel = deviceInfo.normalizedModel ?? normalizeDeviceModel(retainedDevice.model);
-    if (!normalizedModel) {
-      return 0;
-    }
+    const retainedNormalizedModel = normalizeDeviceModel(retainedDevice.model);
+    const retainedStrongIdentity = this.hasStrongIdentity(retainedDevice.platform, retainedNormalizedModel);
 
     const duplicateIds = devices
-      .filter((device) =>
-        device.id !== retainedDevice.id &&
-        device.clientId == null &&
-        device.platform === retainedDevice.platform &&
-        normalizeDeviceModel(device.model) === normalizedModel,
-      )
+      .filter((device) => {
+        if (
+          device.id === retainedDevice.id ||
+          device.clientId != null ||
+          device.platform !== retainedDevice.platform
+        ) {
+          return false;
+        }
+
+        const deviceNormalizedModel = normalizeDeviceModel(device.model);
+        const deviceStrongIdentity = this.hasStrongIdentity(device.platform, deviceNormalizedModel);
+
+        if (retainedStrongIdentity && deviceStrongIdentity) {
+          return deviceNormalizedModel === retainedNormalizedModel;
+        }
+
+        if (totalLimit === 1 && !deviceStrongIdentity) {
+          return true;
+        }
+
+        return false;
+      })
       .map((device) => device.id);
 
     if (duplicateIds.length === 0) {
@@ -500,5 +557,17 @@ export class DeviceService {
     }
 
     return `${deviceInfo.platform} #${deviceNumber}`;
+  }
+
+  private hasStrongDeviceIdentity(deviceInfo: DeviceInfo): boolean {
+    return this.hasStrongIdentity(deviceInfo.platform, deviceInfo.normalizedModel);
+  }
+
+  private hasStrongStoredIdentity(device: DeviceConfig): boolean {
+    return this.hasStrongIdentity(device.platform, normalizeDeviceModel(device.model));
+  }
+
+  private hasStrongIdentity(platform: string, normalizedModel: string | null): boolean {
+    return platform === "Android" && normalizedModel !== null;
   }
 }

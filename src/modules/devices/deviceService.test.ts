@@ -293,6 +293,23 @@ test("serializes same-user burst requests and keeps only one row for unknown-mod
   assert.equal(devices.length, 1);
 });
 
+test("reuses a weak same-platform slot before the user hits the device limit", async () => {
+  const { prisma, service, userId } = createService(3);
+  const firstInfo = parseUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) HappDesktop/1.0");
+  const secondInfo = parseUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClashMeta/1.0");
+
+  const first = await service.registerDevice(userId, firstInfo, true);
+  const second = await service.registerDevice(userId, secondInfo, true);
+  const devices = prisma.listDevices(userId);
+
+  assert.equal(first.success, true);
+  assert.equal(second.success, true);
+  assert.equal(second.matchStrategy, "heuristic");
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0]?.platform, "Windows");
+  assert.equal(devices[0]?.fingerprint, secondInfo.fingerprint);
+});
+
 test("reuses the only same-platform slot at limit 1 when model data is missing", async () => {
   const { prisma, service, userId } = createService(1);
   const originalInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 Chrome/122.0.0.0 Mobile Safari/537.36");
@@ -315,6 +332,24 @@ test("reuses the only same-platform slot at limit 1 when model data is missing",
   assert.equal(devices[0]?.fingerprint, driftedInfo.fingerprint);
 });
 
+test("keeps different weak platforms as separate slots while reusing the existing weak platform slot", async () => {
+  const { prisma, service, userId } = createService(2);
+  const androidInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 Chrome/122.0.0.0 Mobile Safari/537.36");
+  const windowsInfo = parseUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) HappDesktop/1.0");
+  const windowsDriftedInfo = parseUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) ClashMeta/1.0");
+
+  await service.registerDevice(userId, androidInfo, true);
+  await service.registerDevice(userId, windowsInfo, true);
+  const result = await service.registerDevice(userId, windowsDriftedInfo, true);
+  const devices = prisma.listDevices(userId);
+
+  assert.equal(result.success, true);
+  assert.equal(result.matchStrategy, "heuristic");
+  assert.equal(devices.length, 2);
+  assert.equal(devices.filter((device) => device.platform === "Windows").length, 1);
+  assert.equal(devices.filter((device) => device.platform === "Android").length, 1);
+});
+
 test("keeps hard limit for a real new device when the known model changes", async () => {
   const { prisma, service, userId } = createService(1);
   const existingInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 Chrome/122.0.0.0 Mobile Safari/537.36");
@@ -335,6 +370,42 @@ test("keeps hard limit for a real new device when the known model changes", asyn
   assert.equal(result.errorCode, "LIMIT_REACHED");
   assert.equal(result.matchStrategy, "limit_reached");
   assert.equal(devices.length, 1);
+});
+
+test("prefers the only strong same-platform slot for weak requests at limit 1 and drops weak duplicates", async () => {
+  const { prisma, service, userId } = createService(1);
+  const strongInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 Chrome/122.0.0.0 Mobile Safari/537.36");
+  const weakStoredInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 13; K) AppleWebKit/537.36 Chrome/122.0.0.0 Mobile Safari/537.36");
+  const weakIncomingInfo = parseUserAgent("Mozilla/5.0 (Linux; Android 14; Mobile) AppleWebKit/537.36 Version/4.0 Chrome/125.0.0.0 Mobile Safari/537.36");
+
+  prisma.seedDevice({
+    id: "strong",
+    userId,
+    fingerprint: strongInfo.fingerprint,
+    deviceName: "Samsung",
+    platform: "Android",
+    model: "SM-G991B",
+    lastSeenAt: new Date("2026-03-20T10:00:00.000Z"),
+  });
+  prisma.seedDevice({
+    id: "weak-dup",
+    userId,
+    fingerprint: weakStoredInfo.fingerprint,
+    deviceName: "Android",
+    platform: "Android",
+    model: null,
+    lastSeenAt: new Date("2026-03-19T10:00:00.000Z"),
+  });
+
+  const result = await service.registerDevice(userId, weakIncomingInfo, true);
+  const devices = prisma.listDevices(userId);
+
+  assert.equal(result.success, true);
+  assert.equal(result.matchStrategy, "heuristic");
+  assert.equal(result.collapsedDuplicates, 1);
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0]?.id, "strong");
+  assert.equal(devices[0]?.model, "SM-G991B");
 });
 
 test("collapses only obvious null-clientId duplicates for the same known model", async () => {
