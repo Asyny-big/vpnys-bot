@@ -1131,6 +1131,33 @@ export function buildBot(deps: BotDeps): Bot {
     }
   });
 
+  bot.command("msg", async (ctx) => {
+    if (!isAdmin(ctx)) {
+      await replyOrEdit(ctx, "⛔ Недостаточно прав");
+      return;
+    }
+    if (!ctx.from?.id) return;
+
+    const text = ctx.message?.text ?? "";
+    const parts = text.trim().split(/\s+/).slice(1);
+    const targetTelegramId = String(parts[0] ?? "").trim();
+    const messageText = parts.slice(1).join(" ").trim();
+
+    if (!/^\d{1,20}$/.test(targetTelegramId) || !messageText) {
+      await replyOrEdit(ctx, "Формат: /msg <telegramId> <сообщение>");
+      return;
+    }
+
+    try {
+      await ctx.api.sendMessage(Number(targetTelegramId), messageText);
+      await replyOrEdit(ctx, `✅ Сообщение отправлено пользователю <code>${escapeHtml(targetTelegramId)}</code>`, { parse_mode: "HTML" });
+    } catch (e: any) {
+      // eslint-disable-next-line no-console
+      console.error("msg failed", { adminTelegramId: ctx.from.id, targetTelegramId, errorName: e?.name, errorMessage: e?.message });
+      await replyOrEdit(ctx, "❌ Не удалось отправить сообщение. Возможно, пользователь заблокировал бота или ID неверен.");
+    }
+  });
+
   bot.command("addpromo", async (ctx) => {
     if (!isAdmin(ctx)) {
       await replyOrEdit(ctx, "⛔ Команда доступна только администратору");
