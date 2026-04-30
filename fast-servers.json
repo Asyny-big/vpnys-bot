@@ -1,15 +1,15 @@
 {
   "NL": {
-    "name": "[OpenRay] 🇳🇱 NL-1399",
-    "config": "vless://6202b230-417c-4d8e-b624-0f71afa9c75d@95.215.8.237:8443?path=%2F%3Fed%3D2560%26Telegram%F0%9F%87%A8%F0%9F%87%B3%20%40WangCai2&security=tls&encryption=none&insecure=0&host=sni.111000.v6.navy&type=ws&allowInsecure=0&sni=sni.111000.v6.navy#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-1399",
-    "bandwidth": 19.54,
-    "ttfb": 1.167779
+    "name": "[OpenRay] 🇳🇱 NL-4327",
+    "config": "vless://26524cce-d514-4014-a426-365fb266a14d@146.185.164.169:443?allowInsecure=0&sni=ynwta9.api-edge.fgfw.qzz.io&type=ws&host=ynwta9.api-edge.fgfw.qzz.io&path=/danfeng?ed=2560fp=chrome&security=tls#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-4327",
+    "bandwidth": 0.01,
+    "ttfb": 1.006453
   },
   "DE": {
-    "name": "[OpenRay] 🇩🇪 DE-9771",
-    "config": "vless://21d4821e-eddb-475b-be92-13a959b252d9@188.245.76.45:2052?encryption=none&flow=xtls-rprx-vision&security=reality&sni=apple.com&fp=chrome&pbk=uPmhIwZklKjvvRMD2MYFMCuVAVcPV_hJgRfh23N5WFE&sid=1e52722d&type=tcp&headerType=none#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-9771",
-    "bandwidth": 44.43,
-    "ttfb": 0.24027
+    "name": "[OpenRay] 🇩🇪 DE-12536",
+    "config": "vless://6202b230-417c-4d8e-b624-0f71afa9c75d@193.23.219.205:8443?encryption=none&security=tls&sni=sni.latonyamadeline.ndjp.net&insecure=0&allowInsecure=0&type=ws&host=sni.latonyamadeline.ndjp.net&path=%2F%3Fed%3D2560%26https%3A%2F%2Ft.me%2FWangCai2%F0%9F%87%A8%F0%9F%87%B3#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-12536",
+    "bandwidth": 6.44,
+    "ttfb": 1.124143
   },
   "FI": {
     "name": "[OpenRay] 🇫🇮 FI-715",
