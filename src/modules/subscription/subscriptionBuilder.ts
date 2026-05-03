@@ -19,9 +19,17 @@ const MOBILE_BYPASS_BLOCK: ReadonlyArray<string> = [
   "# =========================================",
 ];
 
-
+const TELEGRAM_SERVER_BLOCK: ReadonlyArray<string> = [
+  "# =========================================",
+  "# 🇪🇪 Эстония — для Telegram",
+  "# Альтернативный транспорт",
+  "# =========================================",
+];
 
 const PRIMARY_SERVER_DISPLAY_NAME = "🇪🇪 Эстония";
+const TELEGRAM_SERVER_DISPLAY_NAME = "🇪🇪 Эстония Telegram";
+const TELEGRAM_SERVER_URL =
+  "vless://e589d6ff-ac06-4561-b869-b6c9aec1ef38@95.85.243.120:30887?type=tcp&encryption=none&security=reality&pbk=4fdEtNDoEofzP77fuUgQpr8fd_Rhi2ISno_EnViObTc&fp=chrome&sni=ya.ru&sid=f6&spx=%2F&flow=xtls-rprx-vision#doper-x78x116j";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
@@ -213,6 +221,8 @@ export function buildSubscription(user: BuildSubscriptionUser, params: BuildSubs
 
   lines.push(...PRIMARY_BLOCK);
   lines.push(buildVlessUrl({ ...params.primaryServer, name: PRIMARY_SERVER_DISPLAY_NAME }));
+  lines.push(...TELEGRAM_SERVER_BLOCK);
+  lines.push(withUrlName(TELEGRAM_SERVER_URL, TELEGRAM_SERVER_DISPLAY_NAME));
 
   // Быстрые серверы (если есть)
   const fastServers = params.fastServerUrls ?? [];
