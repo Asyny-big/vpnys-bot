@@ -10,6 +10,12 @@ import { detectAndLogDevice } from "../utils/deviceDetect";
 
 const DEFAULT_XUI_CLIENT_FLOW = "xtls-rprx-vision";
 
+// Shared/static Amnezia VPN config. NOTE: This is a shared configuration, not per-user.
+// It is only exposed for ACTIVE subscriptions to prevent abuse by expired users.
+const AMNEZIA_VPN_URI =
+  "vpn://AAALTXjatVbbTuNIEH3nK6Jo3oBg98UXNIyUSdidBJEETDZk8Chq7E7iGcc2ducyIKT9lf2FlfY_2D_avpjEiOaBlca5uHzqdFdVd1W7HvZq_KoHacJIlNC8qB_XbiQmroetJFlkPePql6BUfDE5XjctCIFrudA8NB3XQCZ0Hat-oKEDQQeGgS3LdbF7CEyAHBtgaGrpUNJNiLHhGsDhdGSbjmUZhpaOFB3ZyHYMaEs6cgC0gY7ekb5_zGvg08fbmrFxsGPwyyx_6uJ-WtAKrKmNLWRALk-t0NjyAsMIqmNMAxN-QyjEDrSh_UlrWK6CVgPf1KA3NfgtTTcQGqRVLchGKLGh10aJ3Fet1pPrhrXzejI0E2i305PR2VqVDM_VqWJSsAlP02kkcrD-4CcC9nnq-fzZ1yefXz_Y8oDiabOuyoMlT5duVR565mnyrMLrlP794gSrWiwjrULwNYReQ_gV1A0UhKoYTxqFYuMFHCXlVlRhr4wfV6fwShd5hlTR0ku7ipVuuhWMxHG6puEkygqhvFG40hkN-TnauaDw42MBKeTbdqYgjmjCOqGy0XZZkrXTEbrNYfh1vDT-aNGs-BqRDB7Zv7P76dmdGY82w7uL4UnFHTUJ9-Y5-obTMBvgNSPLo9XkB_2peGy_BeeEdq3rsR2R1Xizf73oXfXmrUWfXLaO2mQYOAxdjwGdaaxly9vdVP_XcVlNaoqbTsJoPiUB_eb7STMMc1oUtZPaczRHEHC83fM49mFw2TlvXo4n_PGg9sE7bfV77fKZkwY8TMLoGf3Jue-K0k-6AR-DhMCzSZqXMtlwGQvZM4UkGB4Qep5AXIRctIWAuOBy4Yug6Y8ErhQj9ecAV4q59MXPlUgqdRXvJx1h81eXOTcjvBd3WN5Recfqzr83A0pzsY-D5W0cBWonzsN-q9Mf9a-Ws3t2Plzte7Q5D2YX7HT43SXMma9_izbeYn3XRCdyF2kxJzkN1ejecA0Llrhnd-Mc3nW68Hy_e7EaxaP483mMep_zpfl9eZnGV7OxGN1UJdoZiBza1uRBTZahn5wmYZZGCRO7hRsObgAEGyYwjiEGQGzRgHciUcF4pp9RmpE4WlGx8ljEt0vgeVqwHlnQ8oiozlRhLdiyrExoV98I2dYGrySaTaSV8lDHVV6aMwFL33Zo8WNXgO9and3MBc1XNH9Zy-_aJn6gPfqJ7nUpnBbvSem0lpCnLA3SeLISy5DKF722PyqWtwllE6KOBNUPyDNB2xWwnCSFMD6RBgR9GWb1F8THl-N2zadgk0VC7yNyyHtNsBv2uKcObtWthnRKljFrvTluyyuCPMpYGd7TX0___Pvn09_iv2ZuSUmhuteG_FRg1cTI5N3Czykn-5RqwtX3Hvf-A3j7w4U";
+const AMNEZIA_DOWNLOAD_URL = "https://amnezia.org/ru/downloads";
+
 function hostnameFromUrl(baseUrl: string): string {
   const url = new URL(baseUrl);
   return url.hostname;
@@ -388,6 +394,12 @@ export async function registerSubscriptionRoutes(
             font-weight: 600;
         }
 
+        /* Amnezia accent color variables */
+        :root {
+            --amnezia: #a855f7;
+            --amnezia-glow: rgba(168, 85, 247, 0.35);
+        }
+
         .tabs {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -420,6 +432,66 @@ export async function registerSubscriptionRoutes(
             font-weight: 700;
             margin-bottom: 12px;
             padding-left: 4px;
+        }
+        .setup-panel.hidden {
+            display: none;
+        }
+        .method-switch {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .method-btn {
+            appearance: none;
+            border: 1px solid var(--card-border);
+            background: var(--card-bg);
+            color: var(--text-main);
+            border-radius: var(--radius-M);
+            padding: 14px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-align: left;
+            font-family: inherit;
+            transition: border-color 0.2s, background 0.2s, transform 0.1s;
+        }
+        .method-btn:active {
+            transform: scale(0.98);
+        }
+        .method-btn.active {
+            border-color: var(--accent);
+            background: rgba(34, 211, 238, 0.08);
+            box-shadow: 0 4px 18px rgba(34, 211, 238, 0.08);
+        }
+        .method-btn.amnezia.active {
+            border-color: rgba(168, 85, 247, 0.45);
+            background: rgba(168, 85, 247, 0.10);
+            box-shadow: 0 4px 18px rgba(168, 85, 247, 0.12);
+        }
+        .method-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            display: grid;
+            place-items: center;
+            background: rgba(255,255,255,0.06);
+            border: 1px solid var(--card-border);
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+        .method-title {
+            display: block;
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 2px;
+        }
+        .method-desc {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.25;
         }
         
         .app-option {
@@ -598,6 +670,111 @@ export async function registerSubscriptionRoutes(
             mask-image: linear-gradient(to bottom, black 50%, transparent 100%);
         }
 
+        /* Amnezia alternative connection section (violet accent) */
+        .section-hint {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin: -6px 0 12px;
+            padding-left: 4px;
+            line-height: 1.5;
+        }
+        .amnezia-card {
+            position: relative;
+            overflow: hidden;
+            border-color: rgba(168, 85, 247, 0.28);
+            background:
+                linear-gradient(180deg, rgba(168, 85, 247, 0.10) 0%, rgba(168, 85, 247, 0.02) 50%),
+                var(--card-bg);
+            box-shadow: 0 4px 24px rgba(168, 85, 247, 0.08);
+        }
+        .amnezia-card::before {
+            content: '';
+            position: absolute;
+            top: -90px;
+            right: -90px;
+            width: 240px;
+            height: 240px;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.28) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: 0;
+        }
+        .amnezia-card > * { position: relative; z-index: 1; }
+        .amnezia-header {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .amnezia-icon {
+            width: 48px;
+            height: 48px;
+            flex-shrink: 0;
+            border-radius: 12px;
+            background: linear-gradient(135deg, rgba(168, 85, 247, 0.35), rgba(168, 85, 247, 0.08));
+            border: 1px solid rgba(168, 85, 247, 0.35);
+            display: grid;
+            place-items: center;
+            font-size: 22px;
+            box-shadow: 0 4px 14px rgba(168, 85, 247, 0.22);
+        }
+        .amnezia-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 17px;
+            font-weight: 700;
+            letter-spacing: -0.01em;
+        }
+        .amnezia-badge {
+            font-size: 10px;
+            font-weight: 700;
+            padding: 3px 7px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, #a855f7, #d946ef);
+            color: #fff;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+        }
+        .amnezia-subtitle {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+        .amnezia-card .step-list { margin-top: 22px; }
+        .amnezia-card .step-num {
+            color: var(--amnezia);
+            background: rgba(168, 85, 247, 0.12);
+            border-color: rgba(168, 85, 247, 0.28);
+        }
+        .amnezia-card .step-title a {
+            color: var(--amnezia);
+            text-decoration: underline;
+        }
+        .amnezia-card .step-desc strong {
+            color: rgba(255, 255, 255, 0.88);
+            font-weight: 700;
+        }
+        .amnezia-btn {
+            background: linear-gradient(135deg, #a855f7 0%, #d946ef 100%);
+            box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
+        }
+        .amnezia-copy-btn {
+            margin-top: 24px;
+        }
+        .amnezia-locked-hint {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            margin-top: 20px;
+            padding: 12px 14px;
+            background: rgba(168, 85, 247, 0.08);
+            border: 1px solid rgba(168, 85, 247, 0.2);
+            border-radius: var(--radius-S);
+            font-size: 13px;
+            color: var(--text-muted);
+            line-height: 1.5;
+        }
+
         @media (min-width: 600px) {
             .container { max-width: 600px; }
             .card { padding: 32px; }
@@ -649,41 +826,119 @@ export async function registerSubscriptionRoutes(
         </div>
     </div>
 
-    <div class="section-title">Настройка</div>
+    <div class="section-title">Способ подключения</div>
 
-    <!-- Platform Tabs -->
-    <div class="tabs">
-        <button class="tab-btn active" id="tab-android" onclick="switchPlatform('android')">Android / Windows</button>
-        <button class="tab-btn" id="tab-ios" onclick="switchPlatform('ios')">iOS / macOS</button>
+    <div class="method-switch">
+        <button class="method-btn active" id="method-happ" onclick="selectMethod('happ')" type="button">
+            <span class="method-icon">⚡</span>
+            <span>
+                <span class="method-title">Happ</span>
+                <span class="method-desc">Основной способ</span>
+            </span>
+        </button>
+        <button class="method-btn amnezia" id="method-amnezia" onclick="selectMethod('amnezia')" type="button">
+            <span class="method-icon">🛡️</span>
+            <span>
+                <span class="method-title">Amnezia</span>
+                <span class="method-desc">Если Happ не работает</span>
+            </span>
+        </button>
     </div>
 
-    <!-- App Selection Logic (Dynamic) -->
-    <div id="apps-container"></div>
-
-    <!-- Steps -->
-    <div class="card" style="padding: 20px;">
-        <div class="step-list" id="steps-container"></div>
-        
-        <div id="action-area" style="margin-top: 24px;">
-            <a href="#" class="main-btn" id="main-connect-btn">
-                <span style="font-size: 20px">⚡</span> Подключить
-            </a>
+    <div class="setup-panel" id="happ-panel">
+        <!-- Platform Tabs -->
+        <div class="tabs">
+            <button class="tab-btn active" id="tab-android" onclick="switchPlatform('android')">Android / Windows</button>
+            <button class="tab-btn" id="tab-ios" onclick="switchPlatform('ios')">iOS / macOS</button>
         </div>
 
-        <div class="secondary-actions">
-            <button class="sec-btn" onclick="copyLink()">
-                <svg width="16" height="16" fill="none" class="icon"><path d="M5.5 11.5c-.88 0-1.63-.35-2.12-.92A2.96 2.96 0 0 1 2.5 8.5c0-.9.37-1.7 1-2.26.63-.56 1.5-.9 2.5-.9h3v1.5h-3c-1 0-1.5.8-1.5 1.66 0 .86.5 1.66 1.5 1.66h2v1.34h-2Zm5-7c.9 0 1.64.35 2.13.92.62.74.87 1.68.87 2.08 0 .9-.38 1.7-1 2.26-.63.56-1.5.9-2.5.9h-3V9.16h3c1 0 1.5-.8 1.5-1.66 0-.86-.5-1.66-1.5-1.66h-2V4.5h2Zm-5 4.34h8v-1.5h-8v1.5Z" fill="currentColor"/></svg>
-                Копировать
-            </button>
-            <button class="sec-btn" onclick="toggleManual()">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                Ручная
-            </button>
+        <!-- App Selection Logic (Dynamic) -->
+        <div id="apps-container"></div>
+
+        <!-- Steps -->
+        <div class="card" style="padding: 20px;">
+            <div class="step-list" id="steps-container"></div>
+            
+            <div id="action-area" style="margin-top: 24px;">
+                <a href="#" class="main-btn" id="main-connect-btn">
+                    <span style="font-size: 20px">⚡</span> Подключить
+                </a>
+            </div>
+
+            <div class="secondary-actions">
+                <button class="sec-btn" onclick="copyLink()">
+                    <svg width="16" height="16" fill="none" class="icon"><path d="M5.5 11.5c-.88 0-1.63-.35-2.12-.92A2.96 2.96 0 0 1 2.5 8.5c0-.9.37-1.7 1-2.26.63-.56 1.5-.9 2.5-.9h3v1.5h-3c-1 0-1.5.8-1.5 1.66 0 .86.5 1.66 1.5 1.66h2v1.34h-2Zm5-7c.9 0 1.64.35 2.13.92.62.74.87 1.68.87 2.08 0 .9-.38 1.7-1 2.26-.63.56-1.5.9-2.5.9h-3V9.16h3c1 0 1.5-.8 1.5-1.66 0-.86-.5-1.66-1.5-1.66h-2V4.5h2Zm-5 4.34h8v-1.5h-8v1.5Z" fill="currentColor"/></svg>
+                    Копировать
+                </button>
+                <button class="sec-btn" onclick="toggleManual()">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    Ручная
+                </button>
+            </div>
+            
+            <div class="manual-box" id="manual-box">
+                 <div class="key-text" id="manual-key">${escapeHtml(baseSubUrl)}</div>
+                 <button class="sec-btn" onclick="copyLink()" style="width:100%; margin-top:8px;">Скопировать весь ключ</button>
+            </div>
         </div>
-        
-        <div class="manual-box" id="manual-box">
-             <div class="key-text" id="manual-key">${escapeHtml(baseSubUrl)}</div>
-             <button class="sec-btn" onclick="copyLink()" style="width:100%; margin-top:8px;">Скопировать весь ключ</button>
+    </div>
+
+    <div class="setup-panel hidden" id="amnezia-panel">
+        <div class="card amnezia-card">
+            <div class="amnezia-header">
+                <div class="amnezia-icon">🛡️</div>
+                <div style="flex: 1; min-width: 0;">
+                    <div class="amnezia-title">Amnezia VPN <span class="amnezia-badge">Запасной</span></div>
+                    <div class="amnezia-subtitle">Скопируйте ключ и вставьте его в поле «Вставьте ключ» внутри приложения</div>
+                </div>
+            </div>
+
+            <div class="step-list">
+                <div class="step">
+                    <div class="step-num">1</div>
+                    <div class="step-content">
+                        <div class="step-title"><a href="${escapeHtml(AMNEZIA_DOWNLOAD_URL)}" target="_blank" rel="noopener noreferrer">Установите Amnezia VPN</a></div>
+                        <div class="step-desc">Скачайте приложение для вашей платформы и откройте экран добавления соединения.</div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">2</div>
+                    <div class="step-content">
+                        <div class="step-title">Скопируйте ключ на этой странице</div>
+                        <div class="step-desc">Нажмите кнопку «Скопировать ключ» ниже. Ключ начинается с <strong>vpn://</strong>.</div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">3</div>
+                    <div class="step-content">
+                        <div class="step-title">Вставьте ключ в Amnezia</div>
+                        <div class="step-desc">На экране «Соединение» нажмите поле <strong>«Вставьте ключ»</strong> или кнопку <strong>«Вставить»</strong>, затем подтвердите добавление.</div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">4</div>
+                    <div class="step-content">
+                        <div class="step-title">Включите VPN</div>
+                        <div class="step-desc">После добавления конфигурации нажмите кнопку подключения в приложении.</div>
+                    </div>
+                </div>
+            </div>
+
+            ${isActive ? `
+            <button class="main-btn amnezia-btn amnezia-copy-btn" onclick="copyAmnezia()" type="button">
+                <span style="font-size: 20px">📋</span> Скопировать ключ
+            </button>
+            ` : `
+            <div class="amnezia-locked-hint">
+                <span style="font-size: 18px; line-height: 1; flex-shrink: 0;">🔒</span>
+                <span>Оплатите подписку, чтобы получить конфигурацию для Amnezia VPN.</span>
+            </div>
+            <div style="margin-top: 16px;">
+                <a href="${escapeHtml(deps.telegramBotUrl)}" class="main-btn amnezia-btn">
+                    <span style="font-size: 20px">💎</span> Оплатить подписку
+                </a>
+            </div>
+            `}
         </div>
     </div>
 </div>
@@ -698,6 +953,7 @@ export async function registerSubscriptionRoutes(
     const SUB_URL = ${safeJson(baseSubUrl)}; 
     
     // State
+    let currentMethod = 'happ';
     let currentPlatform = 'android';
     let currentApp = 'happ';
 
@@ -745,7 +1001,19 @@ export async function registerSubscriptionRoutes(
         }
         
         switchPlatform(currentPlatform);
+        selectMethod('happ');
     }
+
+    function selectMethod(method) {
+        currentMethod = method === 'amnezia' ? 'amnezia' : 'happ';
+
+        const happActive = currentMethod === 'happ';
+        document.getElementById('method-happ').classList.toggle('active', happActive);
+        document.getElementById('method-amnezia').classList.toggle('active', !happActive);
+        document.getElementById('happ-panel').classList.toggle('hidden', !happActive);
+        document.getElementById('amnezia-panel').classList.toggle('hidden', happActive);
+    }
+    window.selectMethod = selectMethod;
 
     function switchPlatform(p) {
         currentPlatform = p;
@@ -821,11 +1089,27 @@ export async function registerSubscriptionRoutes(
     function copyLink() {
         navigator.clipboard.writeText(SUB_URL).then(() => {
             const t = document.getElementById('toast');
+            const label = t.querySelector('span:last-child');
+            if (label) label.textContent = 'Ссылка скопирована!';
             t.classList.add('visible');
             setTimeout(() => t.classList.remove('visible'), 2000);
         });
     }
     window.copyLink = copyLink;
+
+    ${isActive ? `
+    const AMNEZIA_URI = ${safeJson(AMNEZIA_VPN_URI)};
+    function copyAmnezia() {
+        navigator.clipboard.writeText(AMNEZIA_URI).then(() => {
+            const t = document.getElementById('toast');
+            const label = t.querySelector('span:last-child');
+            if (label) label.textContent = 'Ключ Amnezia скопирован!';
+            t.classList.add('visible');
+            setTimeout(() => t.classList.remove('visible'), 2000);
+        }).catch(() => { prompt('Скопируйте ключ Amnezia:', AMNEZIA_URI); });
+    }
+    window.copyAmnezia = copyAmnezia;
+    ` : ''}
 
     function toggleManual() {
         document.getElementById('manual-box').classList.toggle('visible');
