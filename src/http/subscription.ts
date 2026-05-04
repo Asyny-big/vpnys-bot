@@ -754,6 +754,21 @@ export async function registerSubscriptionRoutes(
             color: rgba(255, 255, 255, 0.88);
             font-weight: 700;
         }
+        .amnezia-values {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .amnezia-value {
+            padding: 6px 9px;
+            border-radius: 10px;
+            background: rgba(168, 85, 247, 0.12);
+            border: 1px solid rgba(168, 85, 247, 0.24);
+            color: rgba(255, 255, 255, 0.92);
+            font-size: 12px;
+            font-weight: 700;
+        }
         .amnezia-btn {
             background: linear-gradient(135deg, #a855f7 0%, #d946ef 100%);
             box-shadow: 0 4px 20px rgba(168, 85, 247, 0.4);
@@ -917,6 +932,19 @@ export async function registerSubscriptionRoutes(
                 </div>
                 <div class="step">
                     <div class="step-num">4</div>
+                    <div class="step-content">
+                        <div class="step-title">Настройте стабильную работу</div>
+                        <div class="step-desc">Откройте список серверов, нажмите шестерёнку у <strong>«Сервер 1»</strong>, затем выберите <strong>AmneziaWG</strong> → <strong>AmneziaWG настройки подключения</strong>. Укажите значения ниже и нажмите <strong>«Сохранить»</strong>.
+                            <div class="amnezia-values">
+                                <span class="amnezia-value">MTU = 1280</span>
+                                <span class="amnezia-value">Jc = 1</span>
+                                <span class="amnezia-value">Jmax = 20</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="step">
+                    <div class="step-num">5</div>
                     <div class="step-content">
                         <div class="step-title">Включите VPN</div>
                         <div class="step-desc">После добавления конфигурации нажмите кнопку подключения в приложении.</div>
