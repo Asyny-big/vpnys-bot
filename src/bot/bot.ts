@@ -226,7 +226,7 @@ export function buildBot(deps: BotDeps): Bot {
   };
 
   const sendStartScreen = async (ctx: any, caption: string): Promise<void> => {
-    const opts = { caption, reply_markup: MAIN_KEYBOARD };
+    const opts = { caption, parse_mode: "HTML" as const, reply_markup: MAIN_KEYBOARD };
     try {
       if (botImageFileId) {
         await ctx.replyWithPhoto(botImageFileId, opts);
@@ -243,21 +243,23 @@ export function buildBot(deps: BotDeps): Bot {
         botImageFileId = fileId;
       }
     } catch {
-      await ctx.reply(caption, { reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
+      await ctx.reply(caption, { parse_mode: "HTML", reply_markup: MAIN_KEYBOARD, link_preview_options: { is_disabled: true } });
     }
   };
 
   const buildStartCaption = (lines: string[] = []): string =>
     [
-      "🦊 ЛисVPN — спокойный интернет без заморочек",
+      "🦊 <b>ЛисVPN</b> — быстрый и тихий интернет",
       "",
-      "Эстония 🇪🇪 • стабильно • просто",
-      "Подключил — и пользуешься",
+      "🇪🇪 Сервер в Эстонии",
+      "⚡ Стабильно и просто",
+      "🚀 Подключение за минуту",
       "",
       ...lines,
-      "Жми «🚀 Подключить VPN» — дальше я всё сделаю.",
+      lines.length ? "" : "",
+      "👇 Открой <b>«🏠 Личный кабинет»</b> — дальше я всё сделаю.",
     ]
-      .filter(Boolean)
+      .filter((line, idx, arr) => !(line === "" && arr[idx - 1] === ""))
       .join("\n");
 
   const lock = (key: string): boolean => {
@@ -286,14 +288,15 @@ export function buildBot(deps: BotDeps): Bot {
     const text = [
       "🆘 <b>Поддержка LisVPN</b>",
       "",
-      "Если есть вопрос или что-то не получается — напишите нам, мы поможем.",
-      username.length ? `Контакт: @${escapeHtml(username)}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+      "<blockquote>Если что-то не работает или есть вопрос — напиши нам.",
+      "Мы ответим и поможем 🦊",
+      "</blockquote>",
+      "",
+      ...(username.length ? [`📨 Контакт: <b>@${escapeHtml(username)}</b>`] : []),
+    ].join("\n");
 
     const kb = new InlineKeyboard();
-    if (supportUrl) kb.url("🆘 Открыть чат поддержки", supportUrl).row();
+    if (supportUrl) kb.url("💬 Написать в поддержку", supportUrl).row();
     kb.text("🏠 Личный кабинет", "nav:cabinet");
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
@@ -347,33 +350,46 @@ export function buildBot(deps: BotDeps): Bot {
       }
     }
 
-    const statusLine = active && expiresAtLabel ? `✅ Активен до <b>${escapeHtml(expiresAtLabel)}</b>` : "🙈 Не активен";
+    const statusBlock = active && expiresAtLabel
+      ? [
+        "<blockquote>🟢 <b>VPN активен</b>",
+        `📅 До: <b>${escapeHtml(expiresAtLabel)}</b>`,
+        ...(deviceLimit ? [`📱 Устройства: <b>${escapeHtml(deviceLimit)}</b>`] : []),
+        "</blockquote>",
+      ]
+      : [
+        "<blockquote>⚪ <b>VPN не активен</b>",
+        "✨ Подключи подписку — и поехали",
+        "</blockquote>",
+      ];
+
+    const profileLines = [
+      `• Имя: <b>${firstName}</b>`,
+      ...(username ? [`• Username: <b>${username}</b>`] : []),
+      `• Telegram ID: <code>${escapeHtml(telegramId)}</code>`,
+    ];
 
     const text = [
       "🏠 <b>Личный кабинет</b>",
       "",
       "👤 <b>Профиль</b>",
-      `• Имя: <b>${firstName}</b>`,
-      username ? `• Username: <b>${username}</b>` : "",
-      `• Telegram ID: <code>${escapeHtml(telegramId)}</code>`,
+      ...profileLines,
       "",
       "📊 <b>Статус</b>",
-      `> 🔐 VPN: ${statusLine}`,
-      deviceLimit ? `> 📱 Устройства: <b>${escapeHtml(deviceLimit)}</b>` : "",
-    ]
-      .filter(Boolean)
-      .join("\n");
+      ...statusBlock,
+    ].join("\n");
 
     const kb = new InlineKeyboard();
     if (active) {
-      kb.text("🔄 Продлить", "ext:open").row();
+      kb.text("🔄 Продлить подписку", "ext:open").row();
+      kb.text("🔐 Моя подписка", "nav:sub").row();
+      kb.text("📱 Мои устройства", "devices:list").row();
     } else {
       kb.text("🚀 Подключить VPN", "nav:buy").row();
+      kb.text("📱 Мои устройства", "devices:list").row();
     }
 
-    kb.text("💳 Подписка", "nav:sub").row();
-    kb.text("🎁 Ввести промокод", "nav:promo").row();
-    kb.text("🔗 Рефералка", "nav:ref").row();
+    kb.text("🎁 Промокод", "nav:promo").text("🔗 Рефералка", "nav:ref").row();
     kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: kb });
@@ -411,10 +427,19 @@ export function buildBot(deps: BotDeps): Bot {
 
     const listFooter = invitedCount > maxToShow ? `Показаны последние ${maxToShow} из ${invitedCount}.` : "";
 
+    const friendsSection = invitedCount
+      ? ["👥 <b>Последние друзья</b>", ...invitedLines, ...(listFooter ? [listFooter] : [])]
+      : ["👥 <b>Последние друзья</b>", "<i>Пока пусто. Отправь ссылку другу — и он появится здесь.</i>"];
+
     const text = [
       "🔗 <b>Рефералка</b>",
       "",
+      `<blockquote>🎁 <b>+${REFERRAL_REWARD_DAYS} дней</b> тебе и другу`,
+      "За каждого нового друга — один раз.",
+      "</blockquote>",
+      "",
       "📎 <b>Твоя ссылка</b>",
+      "<i>Нажми, чтобы скопировать:</i>",
       `<code>${escapeHtml(referralLink)}</code>`,
       "",
       "📊 <b>Статистика</b>",
@@ -422,21 +447,15 @@ export function buildBot(deps: BotDeps): Bot {
       `• 🎁 Начислено: <b>${bonusDays} дней</b>`,
       `• ⏳ Ожидает: <b>${pendingCount}</b>`,
       "",
-      `> 🎁 Бонус: +${REFERRAL_REWARD_DAYS} дней тебе и другу (за каждого нового друга — один раз).`,
-      "",
       "ℹ️ <b>Как это работает</b>",
-      "• Отправь другу ссылку.",
-      "• Друг запускает бота впервые по ссылке.",
-      "• Если всё ок — начислим бонусные дни обоим.",
+      "1. Отправь другу свою ссылку",
+      "2. Друг запускает бота впервые по ней",
+      "3. Обоим начисляем бонусные дни",
       "",
-      "<i>Если друг уже пользовался ботом или сработает анти-абьюз, начисления может не быть.</i>",
+      "<i>Если друг уже пользовался ботом или сработает анти-абьюз — бонуса не будет.</i>",
       "",
-      invitedCount ? "👥 <b>Последние приглашённые</b>" : "👥 <b>Последние приглашённые</b>\n<i>Пока пусто. Отправь ссылку другу — и он появится в списке.</i>",
-      ...(invitedCount ? invitedLines : []),
-      ...(listFooter ? [listFooter] : []),
-    ]
-      .filter(Boolean)
-      .join("\n");
+      ...friendsSection,
+    ].join("\n");
 
     await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
   };
@@ -457,32 +476,48 @@ export function buildBot(deps: BotDeps): Bot {
     const active = !!effectiveExpiresAt && effectiveExpiresAt.getTime() > Date.now() && state.enabled;
     const expires = active && effectiveExpiresAt ? formatRuDateTime(effectiveExpiresAt) : "";
 
-    const text = [
-      "💳 <b>Подписка</b>",
-      "",
-      active ? `✅ VPN работает до <b>${escapeHtml(expires)}</b>` : "🙈 Сейчас не активна",
-      `📱 Устройства: <b>${escapeHtml(formatDevices(sub.deviceLimit))}</b>`,
-      "",
-      "🟢 Зелёный сервер — работает. Выбирай его.",
-      "🔴 Красный — не работает. Пропускай.",
-      "🔢 Цифры рядом — скорость отклика. Чем меньше, тем лучше.",
-      "«н/д» — сервер не отвечает. Не выбирай.",
-      "⚡ Не грузит? Смени сервер на другой зелёный.",
-      "",
-      "<i>🦊 Зелёный — друг. Красный — не сегодня.</i>",
-    ]
-      .filter(Boolean)
-      .join("\n");
-
     const token = sub.xuiSubscriptionId;
-    const subscriptionUrl = deps.subscriptions.connectUrl(deps.backendPublicUrl, token);
-    const kb = new InlineKeyboard().url("🚀 Подключить VPN", subscriptionUrl).row();
-    if (active) kb.text("🔄 Продлить подписку", "ext:open").row();
-    kb.text("📄 Инструкция", "nav:guide")
-      .row()
-      .text("🏠 Личный кабинет", "nav:cabinet")
-      .row()
-      .add(supportButton(deps, "🆘 Поддержка"));
+    const connectUrl = deps.subscriptions.connectUrl(deps.backendPublicUrl, token);
+    const subscriptionUrl = deps.subscriptions.subscriptionUrl(deps.backendPublicUrl, token);
+
+    const kb = new InlineKeyboard();
+
+    let text: string;
+    if (active) {
+      text = [
+        "🔐 <b>Моя подписка</b>",
+        "",
+        "<blockquote>🟢 <b>VPN активен</b>",
+        `📅 До: <b>${escapeHtml(expires)}</b>`,
+        `📱 Устройства: <b>${escapeHtml(formatDevices(sub.deviceLimit))}</b>`,
+        "</blockquote>",
+        "",
+        "🔗 <b>Ссылка подписки</b>",
+        "<i>Нажми на ссылку — она скопируется:</i>",
+        `<code>${escapeHtml(subscriptionUrl)}</code>`,
+        "",
+        "💡 Вставь её в приложение (Happ, V2rayNG, Hiddify и т.п.) и включи VPN.",
+        "",
+        "<i>🦊 Проще всего — через страницу подключения кнопкой ниже.</i>",
+      ].join("\n");
+
+      kb.url("🚀 Страница подключения", connectUrl).row();
+      kb.text("🔄 Продлить подписку", "ext:open").row();
+      kb.text("📄 Инструкция", "nav:guide").row();
+    } else {
+      text = [
+        "🔐 <b>Моя подписка</b>",
+        "",
+        "<blockquote>⚪ <b>VPN не активен</b>",
+        "Оформи подписку — и всё заработает за минуту.",
+        "</blockquote>",
+      ].join("\n");
+
+      kb.text("💳 Оформить подписку", "nav:buy").row();
+    }
+
+    kb.text("🏠 Личный кабинет", "nav:cabinet").row();
+    kb.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEditBranded(ctx, text, { parse_mode: "HTML", reply_markup: kb });
   };
@@ -502,16 +537,17 @@ export function buildBot(deps: BotDeps): Bot {
     const textLines = [
       "📱 <b>Устройства</b>",
       "",
-      `Сейчас можно подключить: <b>${escapeHtml(formatDevices(quoted.currentDeviceLimit))}</b>`,
+      `<blockquote>🔢 Текущий лимит: <b>${escapeHtml(formatDevices(quoted.currentDeviceLimit))}</b></blockquote>`,
+      "",
     ];
 
     const kb = new InlineKeyboard();
 
     if (quoted.canAdd) {
-      textLines.push(`Добавить ещё одно устройство — <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`);
+      textLines.push(`➕ Добавить слот — <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`);
       kb.text(`➕ Добавить за ${formatRub(quoted.priceRub)}`, "dev:pay").row();
     } else {
-      textLines.push(`🚫 Сейчас максимум — ${MAX_DEVICE_LIMIT}.`);
+      textLines.push(`🚫 Сейчас максимум — <b>${MAX_DEVICE_LIMIT}</b>.`);
     }
 
     kb.text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
@@ -540,7 +576,11 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    const text = ["Выбери, как оплачиваем 💰", "", `+1 устройство — <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`].join("\n");
+    const text = [
+      "💰 <b>Как оплачиваем?</b>",
+      "",
+      `<blockquote>➕ +1 устройство — <b>${escapeHtml(formatRub(quoted.priceRub))}</b></blockquote>`,
+    ].join("\n");
 
     const hasYoo = deps.payments.isYooKassaEnabled();
     const hasCb = deps.payments.isCryptoBotEnabled();
@@ -550,7 +590,7 @@ export function buildBot(deps: BotDeps): Bot {
     }
 
     const kb = new InlineKeyboard();
-    if (hasYoo) kb.text("₽ Рубли", "dev:do:yoo");
+    if (hasYoo) kb.text("₽ Рубли (ЮKassa)", "dev:do:yoo");
     if (hasCb) kb.text("$ Крипта", "dev:do:cb");
     kb.row()
       .text("🔙 Назад", "nav:devices")
@@ -586,34 +626,47 @@ export function buildBot(deps: BotDeps): Bot {
     const chosenDevices = quote.selectedDeviceLimit;
     const total = formatRub(quote.totalRub);
 
-    const title = flow === CheckoutFlow.EXTEND ? "🔄 Продлеваем подписку" : "🦊 Оформляем подписку";
-    const payLabel = flow === CheckoutFlow.EXTEND ? `Продлить за ${total}` : `Оплатить ${total}`;
+    const title = flow === CheckoutFlow.EXTEND ? "🔄 <b>Продление подписки</b>" : "🦊 <b>Оформление подписки</b>";
+    const payLabel = flow === CheckoutFlow.EXTEND ? `🔄 Продлить · ${total}` : `💳 Оплатить · ${total}`;
 
     const text = [
       title,
       "",
-      "Сколько устройств подключаем?",
-      `Выбрано: <b>${escapeHtml(formatDevices(chosenDevices))}</b>`,
-      `Срок: <b>${planDays} дней</b>`,
+      "<blockquote>📅 Срок: <b>" + planDays + " дней</b>",
+      `📱 Устройства: <b>${escapeHtml(formatDevices(chosenDevices))}</b>`,
+      `💰 Итого: <b>${escapeHtml(total)}</b>`,
+      "</blockquote>",
       "",
-      `${escapeHtml(formatDevices(chosenDevices))} — ${escapeHtml(total)}`,
+      "<i>Настрой параметры ниже 👇</i>",
     ].join("\n");
 
-    const kb = new InlineKeyboard()
-      .text("➖", `${flow}:dev:dec:${planDays}:${chosenDevices}`)
+    const kb = new InlineKeyboard();
+
+    kb.text("📱 Устройства", `${flow}:dev:noop:${planDays}:${chosenDevices}`).row();
+    kb.text("➖", `${flow}:dev:dec:${planDays}:${chosenDevices}`)
       .text(`${chosenDevices}`, `${flow}:dev:noop:${planDays}:${chosenDevices}`)
       .text("➕", `${flow}:dev:inc:${planDays}:${chosenDevices}`)
       .row();
 
     for (let i = MIN_DEVICE_LIMIT; i <= MAX_DEVICE_LIMIT; i++) {
-      kb.text(`${i}`, `${flow}:cfg:${planDays}:${i}`);
+      const label = i === chosenDevices ? `• ${i} •` : `${i}`;
+      kb.text(label, `${flow}:cfg:${planDays}:${i}`);
       if (i % 6 === 0) kb.row();
     }
 
-    kb.row()
-      .text("30 дней", `${flow}:cfg:30:${chosenDevices}`)
-      .text("90 дней", `${flow}:cfg:90:${chosenDevices}`)
-      .text("180 дней", `${flow}:cfg:180:${chosenDevices}`);
+    kb.row().text("📅 Срок", `${flow}:cfg:${planDays}:${chosenDevices}`).row();
+    kb.text(
+      planDays === 30 ? "• 30 дней •" : "30 дней",
+      `${flow}:cfg:30:${chosenDevices}`,
+    )
+      .text(
+        planDays === 90 ? "• 90 дней •" : "90 дней",
+        `${flow}:cfg:90:${chosenDevices}`,
+      )
+      .text(
+        planDays === 180 ? "• 180 дней •" : "180 дней",
+        `${flow}:cfg:180:${chosenDevices}`,
+      );
 
     kb.row().text(payLabel, `${flow}:pay:${planDays}:${chosenDevices}`);
     kb.row().text("🏠 Личный кабинет", "nav:cabinet");
@@ -638,7 +691,14 @@ export function buildBot(deps: BotDeps): Bot {
 
     const total = formatRub(quote.totalRub);
 
-    const text = ["Выбери, как оплачиваем 💰", "", `Сумма: <b>${escapeHtml(total)}</b>`, `Срок: <b>${planDays} дней</b>`, `Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`].join("\n");
+    const text = [
+      "💰 <b>Как оплачиваем?</b>",
+      "",
+      `<blockquote>💵 Сумма: <b>${escapeHtml(total)}</b>`,
+      `📅 Срок: <b>${planDays} дней</b>`,
+      `📱 Устройства: <b>${escapeHtml(formatDevices(quote.selectedDeviceLimit))}</b>`,
+      "</blockquote>",
+    ].join("\n");
 
     const hasYoo = deps.payments.isYooKassaEnabled();
     const hasCb = deps.payments.isCryptoBotEnabled();
@@ -648,7 +708,7 @@ export function buildBot(deps: BotDeps): Bot {
     }
 
     const kb = new InlineKeyboard();
-    if (hasYoo) kb.text("₽ Рубли", `${flow}:do:yoo:${planDays}:${quote.selectedDeviceLimit}`);
+    if (hasYoo) kb.text("₽ Рубли (ЮKassa)", `${flow}:do:yoo:${planDays}:${quote.selectedDeviceLimit}`);
     if (hasCb) kb.text("$ Крипта", `${flow}:do:cb:${planDays}:${quote.selectedDeviceLimit}`);
     kb.row()
       .text("🔙 Назад", `${flow}:cfg:${planDays}:${quote.selectedDeviceLimit}`)
@@ -658,6 +718,24 @@ export function buildBot(deps: BotDeps): Bot {
       .add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const buildCheckoutMessage = (payUrl: string): { text: string; reply_markup: InlineKeyboard; parse_mode: "HTML" } => {
+    const text = [
+      "💳 <b>Счёт готов</b>",
+      "",
+      "Нажми кнопку ниже или скопируй ссылку:",
+      `<code>${escapeHtml(payUrl)}</code>`,
+      "",
+      "<i>🦊 После оплаты я всё включу автоматически.</i>",
+    ].join("\n");
+
+    const kb = new InlineKeyboard()
+      .url("💳 Оплатить", payUrl).row()
+      .text("🏠 Личный кабинет", "nav:cabinet").row()
+      .add(supportButton(deps, "🆘 Поддержка"));
+
+    return { text, reply_markup: kb, parse_mode: "HTML" };
   };
 
   const startSubscriptionCheckout = async (ctx: any, flow: CheckoutFlow, providerRaw: "yoo" | "cb", planDays: 30 | 90 | 180, deviceLimit: number): Promise<void> => {
@@ -675,10 +753,8 @@ export function buildBot(deps: BotDeps): Bot {
         deviceLimit,
       });
 
-      const text = ["Почти всё 👌", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я сам всё включу."]
-        .join("\n");
-
-      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+      const msg = buildCheckoutMessage(created.payUrl);
+      await replyOrEdit(ctx, msg.text, { parse_mode: msg.parse_mode, reply_markup: msg.reply_markup });
     } catch (e: any) {
       if (e?.name === "OfferNotAcceptedError") {
         await showOfferOnceAndRecord(ctx, String(ctx.from.id));
@@ -688,9 +764,8 @@ export function buildBot(deps: BotDeps): Bot {
           planDays,
           deviceLimit,
         });
-        const text = ["Почти всё 👌", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты я сам всё включу."]
-          .join("\n");
-        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+        const msg = buildCheckoutMessage(created.payUrl);
+        await replyOrEdit(ctx, msg.text, { parse_mode: msg.parse_mode, reply_markup: msg.reply_markup });
         return;
       }
       // eslint-disable-next-line no-console
@@ -703,30 +778,32 @@ export function buildBot(deps: BotDeps): Bot {
 
   const showGuide = async (ctx: any): Promise<void> => {
     const text = [
-      "📄 <b>Как пользоваться LisVPN</b>",
+      "📄 <b>Инструкция</b>",
       "",
-      "1) Нажми «🚀 Подключить VPN» в боте.",
-      "2) На странице подписки выбери <b>Happ</b> (или другое приложение) и нажми «Добавить подписку».",
-      "3) В приложении включи VPN.",
+      "🚀 <b>Подключение за 3 шага</b>",
+      "<blockquote>1️⃣ В Кабинете открой <b>«Моя подписка»</b>",
+      "2️⃣ Нажми <b>«🚀 Страница подключения»</b>",
+      "3️⃣ Выбери <b>Happ</b>, добавь подписку и включи VPN",
+      "</blockquote>",
       "",
       "🦊 <b>Как выбрать сервер</b>",
-      "",
-      "🟢 Зелёный сервер — работает. Выбирай его.",
-      "🔴 Красный — не работает. Пропускай.",
-      "🔢 Цифры рядом — скорость отклика. Чем меньше, тем лучше.",
-      "«н/д» — сервер не отвечает. Не выбирай.",
-      "⚡ Не грузит? Смени сервер на другой зелёный.",
-      "",
+      "<blockquote>🟢 Зелёный — работает, выбирай его",
+      "🔴 Красный — не работает, пропускай",
+      "🔢 Цифры — скорость отклика (меньше = лучше)",
+      "«н/д» — сервер не отвечает",
+      "⚡ Не грузит? Смени на другой зелёный",
+      "</blockquote>",
       "<i>🦊 Зелёный — друг. Красный — не сегодня.</i>",
       "",
-      "📶 <b>Если в мобильной сети «белый список»</b>",
-      "Иногда оператор пропускает только отдельные сайты (например, Яндекс, VK, Госуслуги).",
-      "В таких сетях <b>подписка может не добавляться и не обновляться</b> — это ограничение сети, а не ошибка VPN.",
-      "Решение: добавляй подписку по Wi‑Fi, а на мобильном интернете просто переключи сервер на зелёный.",
+      "📶 <b>«Белый список» оператора</b>",
+      "Иногда мобильный оператор пропускает только отдельные сайты.",
+      "В таких сетях <b>подписка может не добавляться</b> — это ограничение сети, не VPN.",
+      "",
+      "<i>💡 Добавляй подписку по Wi-Fi, а на мобильной сети — просто переключи сервер.</i>",
       "",
       "🔄 <b>Когда обновлять подписку</b>",
       "После переустановки приложения, на новом устройстве или если пропали серверы.",
-      "Если всё работает — <b>обновлять не нужно</b>.",
+      "Работает — <b>обновлять не нужно</b>.",
     ].join("\n");
 
     const kb = new InlineKeyboard().text("🏠 Личный кабинет", "nav:cabinet").row().add(supportButton(deps, "🆘 Поддержка"));
@@ -736,10 +813,12 @@ export function buildBot(deps: BotDeps): Bot {
   const showAbout = async (ctx: any): Promise<void> => {
     const text = [
       "🦊 <b>ЛисVPN</b>",
-      "Интернет без нервов.",
-      "Включил и поехали.",
       "",
-      "Если что-то глючит, мы рядом.",
+      "<blockquote>Интернет без нервов.",
+      "Включил — и поехали.",
+      "</blockquote>",
+      "",
+      "<i>Если что-то глючит — мы рядом.</i>",
     ].join("\n");
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
@@ -751,57 +830,60 @@ export function buildBot(deps: BotDeps): Bot {
       deps.devices.getDeviceLimits(userId),
     ]);
 
-    let text = `📱 <b>Управление устройствами</b>\n\n`;
-    text += `Лимит: <b>${limits.currentDevices}/${limits.totalLimit}</b>\n\n`;
+    const headerLines: string[] = ["📱 <b>Мои устройства</b>", ""];
+
+    const slotsBadge = limits.availableSlots > 0
+      ? `✅ Свободно слотов: <b>${limits.availableSlots}</b>`
+      : "⚠️ <b>Лимит достигнут</b>";
+
+    headerLines.push(
+      `<blockquote>📊 Занято: <b>${limits.currentDevices} / ${limits.totalLimit}</b>`,
+      slotsBadge,
+      "</blockquote>",
+      "",
+    );
 
     if (devices.length === 0) {
-      text += `<i>У вас пока нет подключённых устройств</i>\n\n`;
-      text += `Откройте ссылку подключения с любого устройства — оно автоматически добавится (если есть свободный слот).`;
+      headerLines.push(
+        "<i>Пока ни одного устройства не подключено.</i>",
+        "",
+        "💡 Открой ссылку подписки на любом устройстве — оно появится здесь автоматически (если есть свободный слот).",
+      );
     } else {
-      text += `<b>Подключённые устройства:</b>\n\n`;
-
+      const now = new Date();
+      const deviceBlockLines: string[] = [];
       for (const device of devices) {
         const lastSeen = new Date(device.lastSeenAt);
-        const now = new Date();
         const diffMs = now.getTime() - lastSeen.getTime();
         const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
         let timeAgo = "";
-        if (diffDays === 0) {
-          timeAgo = "сегодня";
-        } else if (diffDays === 1) {
-          timeAgo = "вчера";
-        } else if (diffDays < 7) {
-          timeAgo = `${diffDays} дн. назад`;
-        } else {
-          timeAgo = formatRuDayMonth(lastSeen);
-        }
+        if (diffDays === 0) timeAgo = "сегодня";
+        else if (diffDays === 1) timeAgo = "вчера";
+        else if (diffDays < 7) timeAgo = `${diffDays} дн. назад`;
+        else timeAgo = formatRuDayMonth(lastSeen, now);
 
-        text += `${escapeHtml(device.deviceName)}\n`;
-        text += `<i>Последнее подключение: ${timeAgo}</i>\n\n`;
+        deviceBlockLines.push(`📱 <b>${escapeHtml(device.deviceName)}</b>`);
+        deviceBlockLines.push(`   <i>был в сети ${escapeHtml(timeAgo)}</i>`);
       }
+      headerLines.push("<b>Подключённые устройства</b>", ...deviceBlockLines);
     }
 
-    if (limits.availableSlots > 0) {
-      text += `\n✅ Доступно слотов: <b>${limits.availableSlots}</b>`;
-    } else {
-      text += `\n⚠️ Лимит устройств достигнут`;
-    }
+    const text = headerLines.join("\n");
 
-    // Build keyboard
     const keyboard = new InlineKeyboard();
 
-    // Add remove buttons for each device
     for (const device of devices) {
-      keyboard.text(`❌ ${device.deviceName.slice(0, 20)}`, `devices:remove:${device.id}`).row();
+      const label = device.deviceName.length > 22 ? `${device.deviceName.slice(0, 22)}…` : device.deviceName;
+      keyboard.text(`❌ ${label}`, `devices:remove:${device.id}`).row();
     }
 
-    // Add "Buy Slot" button if at limit
-    if (limits.availableSlots === 0) {
-      keyboard.text("💳 Купить дополнительный слот", "devices:buy_slot").row();
+    if (limits.availableSlots === 0 && devices.length > 0) {
+      keyboard.text("🛒 Купить доп. слот", "devices:buy_slot").row();
     }
 
-    keyboard.text("🔙 Назад в меню", "menu:main");
+    keyboard.text("🏠 Личный кабинет", "nav:cabinet").row();
+    keyboard.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
   };
@@ -816,22 +898,22 @@ export function buildBot(deps: BotDeps): Bot {
     }
 
     const text = [
-      `💳 <b>Дополнительное устройство</b>\n`,
-      `Стоимость: <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`,
-      ``,
-      `Цена считается по оставшемуся сроку подписки: <b>${quoted.monthsRemaining} × 30 дней</b>.`,
-      ``,
-      `После оплаты вы сможете подключить ещё одно устройство к вашей подписке.`,
-      ``,
-      `<i>Слот действует пока активна подписка</i>`,
+      "🛒 <b>Дополнительный слот</b>",
+      "",
+      `<blockquote>💳 Цена: <b>${escapeHtml(formatRub(quoted.priceRub))}</b>`,
+      `📅 За остаток подписки: <b>${quoted.monthsRemaining} × 30 дней</b>`,
+      "</blockquote>",
+      "",
+      "После оплаты добавим ещё один слот — подключай новое устройство.",
+      "",
+      "<i>🦊 Слот работает, пока активна подписка.</i>",
     ].join("\n");
 
     const keyboard = new InlineKeyboard();
-
-    // Payment buttons (provider:yookassa or provider:cryptobot)
-    keyboard.text("💳 ЮКassa", `device_slot:pay:yookassa`).row();
-    keyboard.text("💠 Crypto", `device_slot:pay:cryptobot`).row();
-    keyboard.text("🔙 Назад", "devices:list");
+    keyboard.text("₽ ЮKassa", `device_slot:pay:yookassa`).text("$ Crypto", `device_slot:pay:cryptobot`).row();
+    keyboard.text("🔙 К устройствам", "devices:list").row();
+    keyboard.text("🏠 Личный кабинет", "nav:cabinet").row();
+    keyboard.add(supportButton(deps, "🆘 Поддержка"));
 
     await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
   };
@@ -862,6 +944,142 @@ export function buildBot(deps: BotDeps): Bot {
     });
     return now;
   };
+
+  const promoSessions = new Map<string, number>();
+  const PROMO_SESSION_TTL_MS = 5 * 60 * 1000;
+
+  const isInPromoSession = (telegramId: string): boolean => {
+    const startedAt = promoSessions.get(telegramId);
+    if (!startedAt) return false;
+    if (Date.now() - startedAt > PROMO_SESSION_TTL_MS) {
+      promoSessions.delete(telegramId);
+      return false;
+    }
+    return true;
+  };
+
+  const openPromoDialog = async (ctx: any): Promise<void> => {
+    const required = await requireUser(ctx);
+    if (!required) return;
+
+    promoSessions.set(required.telegramId, Date.now());
+
+    const text = [
+      "🎁 <b>Промокод</b>",
+      "",
+      "<blockquote>Отправь промокод следующим сообщением.",
+      "Напиши <b>отмена</b>, чтобы выйти.",
+      "</blockquote>",
+      "",
+      "<i>🦊 У вас есть 5 минут.</i>",
+    ].join("\n");
+
+    const kb = new InlineKeyboard()
+      .text("❌ Отмена", "promo:cancel").row()
+      .text("🏠 Личный кабинет", "nav:cabinet");
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: kb });
+  };
+
+  const applyPromoCode = async (ctx: any, required: { telegramId: string; user: any }, codeRaw: string): Promise<void> => {
+    let result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+    if (result.status === "offer_required") {
+      await showOfferOnceAndRecord(ctx, required.telegramId);
+      result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
+      if (result.status === "offer_required") {
+        await replyOrEdit(ctx, "📄 Перед применением промокода нужно принять условия оферты. Попробуй ещё раз чуть позже.", { reply_markup: backToCabinetKeyboard(deps) });
+        return;
+      }
+    }
+    if (result.status === "not_found") {
+      await replyOrEdit(ctx, "❌ <b>Промокод не найден</b>\n<i>Проверь регистр и пробелы.</i>", { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "blocked") {
+      await replyOrEdit(ctx, blockedText, { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "cooldown") {
+      await replyOrEdit(ctx, "⏳ Промокод можно активировать раз в час. Попробуй позже.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "already_used") {
+      await replyOrEdit(ctx, `ℹ️ Этот промокод уже использован: <b>${escapeHtml(result.promo.code)}</b>`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "expired") {
+      await replyOrEdit(ctx, `❌ Промокод просрочен: <b>${escapeHtml(result.promo.code)}</b>`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+    if (result.status === "exhausted") {
+      await replyOrEdit(ctx, `❌ Лимит активаций исчерпан: <b>${escapeHtml(result.promo.code)}</b>`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    // Применяем новую дату к expiresAt и синхронизируем с 3x-ui
+    try {
+      await deps.subscriptions.setExpiryAndEnable({
+        user: required.user,
+        expiresAt: result.paidUntil,
+        enable: true,
+      });
+    } catch (e) {
+      console.error("Failed to sync promo to 3x-ui:", e);
+      await replyOrEdit(ctx, "⚠️ Промокод записан, но произошла ошибка синхронизации. Попробуй обновить Личный кабинет.", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    const text = [
+      "✅ <b>Промокод применён!</b>",
+      "",
+      `<blockquote>🎁 Код: <b>${escapeHtml(result.promo.code)}</b>`,
+      `📅 Бонус: <b>+${result.promo.bonusDays} дней</b>`,
+      `⏳ Оплачено до: <b>${escapeHtml(formatRuDateTime(result.paidUntil))}</b>`,
+      "</blockquote>",
+    ].join("\n");
+
+    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+  };
+
+  // Обработчик диалогового ввода промокода.
+  // Регистрируем ПОСЛЕ registerBroadcast (broadcast вызывает next() для не-админов),
+  // но ДО `bot.hears(...)` для reply-клавиатуры, чтобы не-керуемый текст попадал сюда.
+  bot.on("message:text", async (ctx, next) => {
+    const telegramId = ctx.from?.id ? String(ctx.from.id) : null;
+    if (!telegramId) return next();
+    if (!isInPromoSession(telegramId)) return next();
+
+    const raw = (ctx.message?.text ?? "").trim();
+    if (!raw.length) return next();
+
+    // Пропускаем команды и кнопки reply-клавиатуры — пусть обрабатывают другие хендлеры.
+    if (raw.startsWith("/") || raw === "🏠 Личный кабинет" || raw === "🆘 Поддержка" || raw === "📱 Мои устройства") {
+      promoSessions.delete(telegramId);
+      return next();
+    }
+
+    const lower = raw.toLowerCase();
+    if (lower === "отмена" || lower === "cancel") {
+      promoSessions.delete(telegramId);
+      await ctx.reply("Отменено 🙌", { reply_markup: backToCabinetKeyboard(deps) });
+      return;
+    }
+
+    // Простая валидация кода: уместный размер, только буквы/цифры/-/_.
+    const codeCandidate = raw.replace(/^\/promo\s+/i, "").trim();
+    if (codeCandidate.length > 40 || !/^[\w\-]+$/u.test(codeCandidate)) {
+      await ctx.reply(
+        "❌ Похоже, это не промокод.\n\nОтправь просто <b>код</b> (латиница/цифры) или напиши <b>отмена</b>.",
+        { parse_mode: "HTML" },
+      );
+      return;
+    }
+
+    promoSessions.delete(telegramId);
+    const required = await requireUser(ctx);
+    if (!required) return;
+    await applyPromoCode(ctx, required, codeCandidate);
+  });
 
   bot.command("start", async (ctx) => {
     if (!ctx.from?.id) return;
@@ -897,24 +1115,28 @@ export function buildBot(deps: BotDeps): Bot {
     const active = !!result.expiresAt && result.expiresAt.getTime() > now && result.enabled;
 
     const extraLines: string[] = [];
-    if (paymentSyncStatus === PaymentStatus.SUCCEEDED) extraLines.push("✅ Оплата подтверждена.");
+    if (paymentSyncStatus === PaymentStatus.SUCCEEDED) extraLines.push("✅ <b>Оплата подтверждена</b>");
     if (paymentSyncStatus === PaymentStatus.CANCELED) extraLines.push("❌ Платёж отменён.");
-    if (paymentSyncStatus === PaymentStatus.PENDING) extraLines.push("⏳ Оплата обрабатывается. Если ты оплатил, подожди пару минут.");
+    if (paymentSyncStatus === PaymentStatus.PENDING) extraLines.push("⏳ Оплата обрабатывается. Если ты оплатил — подожди пару минут.");
     if (paymentSyncStatus === "not_configured") extraLines.push("ℹ️ Проверка оплаты недоступна. Я включу VPN, как только получу уведомление.");
-    if (result.isTrialGrantedNow) extraLines.push("🎁 Лови подарок: 7 дней бесплатно.");
+    if (result.isTrialGrantedNow) extraLines.push("🎁 <b>Лови подарок:</b> 7 дней бесплатно ✨");
     if (result.referralReward) {
       try {
         const inviterChat: any = await ctx.api.getChat(Number(result.referralReward.inviterTelegramId));
         const inviterLabel = inviterChat?.username ? `@${inviterChat.username}` : inviterChat?.first_name ?? `ID ${result.referralReward.inviterTelegramId}`;
-        extraLines.push(`🎉 Вас пригласил ${inviterLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`);
+        extraLines.push(`🎉 Тебя пригласил <b>${escapeHtml(String(inviterLabel))}</b> — тебе начислено <b>+${REFERRAL_REWARD_DAYS} дней</b>!`);
 
         const invitedLabel = ctx.from?.username ? `@${ctx.from.username}` : ctx.from?.first_name ?? `ID ${telegramId}`;
-        await ctx.api.sendMessage(Number(result.referralReward.inviterTelegramId), `🎉 У вас новый друг: ${invitedLabel}. Вам начислено +${REFERRAL_REWARD_DAYS} дней!`).catch(() => { });
+        await ctx.api.sendMessage(
+          Number(result.referralReward.inviterTelegramId),
+          `🎉 У тебя новый друг: <b>${escapeHtml(String(invitedLabel))}</b>\nТебе начислено <b>+${REFERRAL_REWARD_DAYS} дней</b>!`,
+          { parse_mode: "HTML" },
+        ).catch(() => { });
       } catch {
         // Best-effort: registration and reward are already done in backend.
       }
     }
-    if (active && result.expiresAt) extraLines.push(`✅ VPN работает до ${formatRuDateTime(result.expiresAt)}`);
+    if (active && result.expiresAt) extraLines.push(`✅ VPN работает до <b>${escapeHtml(formatRuDateTime(result.expiresAt))}</b>`);
 
     await sendStartScreen(ctx, buildStartCaption(extraLines));
   });
@@ -929,64 +1151,16 @@ export function buildBot(deps: BotDeps): Bot {
 
     const text = ctx.message?.text ?? "";
     const spaceIndex = text.indexOf(" ");
-    const codeRaw = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1);
-    if (!codeRaw.trim().length) {
-      await replyOrEdit(ctx, "Формат: /promo <code>", { reply_markup: backToCabinetKeyboard(deps) });
+    const codeRaw = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
+    if (!codeRaw.length) {
+      // Без аргумента — открываем диалоговый ввод.
+      promoSessions.delete(required.telegramId);
+      await openPromoDialog(ctx);
       return;
     }
 
-    let result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
-    if (result.status === "offer_required") {
-      await showOfferOnceAndRecord(ctx, required.telegramId);
-      result = await deps.promos.applyPromo({ userId: required.user.id, code: codeRaw });
-      if (result.status === "offer_required") {
-        await replyOrEdit(ctx, "📄 Перед применением промокода нужно принять условия оферты. Попробуй ещё раз чуть позже.", { reply_markup: backToCabinetKeyboard(deps) });
-        return;
-      }
-    }
-    if (result.status === "not_found") {
-      await replyOrEdit(ctx, "❌ Промокод не найден", { reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-    if (result.status === "blocked") {
-      await replyOrEdit(ctx, blockedText, { reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-    if (result.status === "cooldown") {
-      await replyOrEdit(ctx, "Промокод можно активировать раз в 1 час. Попробуйте позже", { reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-    if (result.status === "already_used") {
-      await replyOrEdit(ctx, `ℹ️ Промокод уже использован: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-    if (result.status === "expired") {
-      await replyOrEdit(ctx, `❌ Промокод просрочен: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-    if (result.status === "exhausted") {
-      await replyOrEdit(ctx, `❌ Лимит использований исчерпан: ${escapeHtml(result.promo.code)}`, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-
-    // Применяем новую дату к expiresAt и синхронизируем с 3x-ui
-    try {
-      await deps.subscriptions.setExpiryAndEnable({
-        user: required.user,
-        expiresAt: result.paidUntil,
-        enable: true,
-      });
-    } catch (e) {
-      console.error("Failed to sync promo to 3x-ui:", e);
-      await replyOrEdit(ctx, "⚠️ Промокод записан, но произошла ошибка синхронизации. Попробуйте обновить личный кабинет.", { reply_markup: backToCabinetKeyboard(deps) });
-      return;
-    }
-
-    await replyOrEdit(
-      ctx,
-      [`✅ Промокод применён: <b>${escapeHtml(result.promo.code)}</b>`, `+<b>${result.promo.bonusDays} дней</b>`, `Теперь оплачено до <b>${escapeHtml(formatRuDateTime(result.paidUntil))}</b>`].join("\n"),
-      { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) },
-    );
+    promoSessions.delete(required.telegramId);
+    await applyPromoCode(ctx, required, codeRaw);
   });
 
   bot.command("devices", async (ctx) => {
@@ -1328,15 +1502,13 @@ export function buildBot(deps: BotDeps): Bot {
   });
   bot.callbackQuery("nav:promo", async (ctx) => {
     await ctx.answerCallbackQuery();
-    const text = [
-      "🎁 <b>Промокод</b>",
-      "",
-      "Отправь промокод командой:",
-      "<code>/promo CODE</code>",
-      "",
-      "Пример: <code>/promo PARTNER2026</code>",
-    ].join("\n");
-    await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) });
+    await openPromoDialog(ctx);
+  });
+
+  bot.callbackQuery("promo:cancel", async (ctx) => {
+    await ctx.answerCallbackQuery();
+    if (ctx.from?.id) promoSessions.delete(String(ctx.from.id));
+    await showCabinet(ctx);
   });
 
 
@@ -1430,20 +1602,30 @@ export function buildBot(deps: BotDeps): Bot {
     try {
       const result = await deps.payments.createDeviceSlotCheckout({ telegramId: required.user.telegramId, provider });
 
-      const keyboard = new InlineKeyboard().url("💳 Оплатить", result.payUrl).row().text("🔙 Назад", "devices:buy_slot");
+      const text = [
+        "💳 <b>Счёт готов</b>",
+        "",
+        "Нажми кнопку ниже или скопируй ссылку:",
+        `<code>${escapeHtml(result.payUrl)}</code>`,
+        "",
+        "<i>🦊 После оплаты слот добавится автоматически.</i>",
+      ].join("\n");
 
-      await replyOrEdit(ctx,
-        `✅ Счёт создан!\n\nНажмите кнопку ниже для оплаты.\nПосле успешной оплаты слот будет добавлен автоматически.`,
-        { parse_mode: "HTML", reply_markup: keyboard }
-      );
+      const keyboard = new InlineKeyboard()
+        .url("💳 Оплатить", result.payUrl).row()
+        .text("🔙 К слоту", "devices:buy_slot").row()
+        .text("🏠 Личный кабинет", "nav:cabinet").row()
+        .add(supportButton(deps, "🆘 Поддержка"));
+
+      await replyOrEdit(ctx, text, { parse_mode: "HTML", reply_markup: keyboard });
     } catch (err: any) {
       if (err?.message === "Subscription is not active") {
         await replyOrEdit(ctx, "Докупка устройства доступна только при активной подписке. Сначала оформи/продли подписку.", { reply_markup: backToCabinetKeyboard(deps) });
         return;
       }
       await replyOrEdit(ctx,
-        `❌ Ошибка создания счёта: ${err?.message ?? "Неизвестная ошибка"}`,
-        { reply_markup: backToCabinetKeyboard(deps) }
+        `❌ Ошибка создания счёта: ${escapeHtml(String(err?.message ?? "Неизвестная ошибка"))}`,
+        { parse_mode: "HTML", reply_markup: backToCabinetKeyboard(deps) }
       );
     }
   });
@@ -1468,10 +1650,8 @@ export function buildBot(deps: BotDeps): Bot {
         provider,
       });
 
-      const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты устройств станет больше автоматически."]
-        .join("\n");
-
-      await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+      const msg = buildCheckoutMessage(created.payUrl);
+      await replyOrEdit(ctx, msg.text, { parse_mode: msg.parse_mode, reply_markup: msg.reply_markup });
     } catch (e: any) {
       if (e?.name === "OfferNotAcceptedError") {
         await showOfferOnceAndRecord(ctx, String(ctx.from.id));
@@ -1479,9 +1659,8 @@ export function buildBot(deps: BotDeps): Bot {
           telegramId: String(ctx.from.id),
           provider,
         });
-        const text = ["📱 Добавляем устройство", "", "Открой ссылку и оплати 👇", created.payUrl, "", "После оплаты устройств станет больше автоматически."]
-          .join("\n");
-        await replyOrEdit(ctx, text, { reply_markup: backToCabinetKeyboard(deps) });
+        const msg = buildCheckoutMessage(created.payUrl);
+        await replyOrEdit(ctx, msg.text, { parse_mode: msg.parse_mode, reply_markup: msg.reply_markup });
         return;
       }
       // eslint-disable-next-line no-console
