@@ -1,7 +1,8 @@
 ﻿import { Keyboard } from "grammy";
 
 export const MAIN_KEYBOARD = new Keyboard()
-  .text("🏠 Кабинет")
+  .text("🏠 Личный кабинет")
   .row()
-  .text("💬 Помощь")
+  .text("📱 Мои устройства")
+  .text("🆘 Поддержка")
   .resized();
