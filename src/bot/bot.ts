@@ -1065,11 +1065,12 @@ export function buildBot(deps: BotDeps): Bot {
       return;
     }
 
-    // Простая валидация кода: уместный размер, только буквы/цифры/-/_.
+    // Простая валидация: одно «слово» без пробелов, разумной длины.
+    // Точное соответствие коду проверит бекенд (applyPromo вернёт "not_found").
     const codeCandidate = raw.replace(/^\/promo\s+/i, "").trim();
-    if (codeCandidate.length > 40 || !/^[\w\-]+$/u.test(codeCandidate)) {
+    if (codeCandidate.length > 64 || /\s/.test(codeCandidate)) {
       await ctx.reply(
-        "❌ Похоже, это не промокод.\n\nОтправь просто <b>код</b> (латиница/цифры) или напиши <b>отмена</b>.",
+        "❌ Похоже, это не промокод.\n\nОтправь промокод <b>одним сообщением, без пробелов</b>, или напиши <b>отмена</b>.",
         { parse_mode: "HTML" },
       );
       return;
