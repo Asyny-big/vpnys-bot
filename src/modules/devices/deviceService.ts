@@ -116,7 +116,7 @@ export class DeviceService {
           ? this.findWeakPlatformMatch(devices, deviceInfo)
           : null;
         if (weakReuseMatch) {
-          const updated = await this.touchExistingDevice(tx, weakReuseMatch, deviceInfo, now);
+          const updated = await this.touchExistingDevice(tx, weakReuseMatch, deviceInfo, now, { preserveFingerprint: true });
           const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, totalLimit);
           return {
             success: true,
@@ -132,7 +132,7 @@ export class DeviceService {
         if (currentDevices >= totalLimit) {
           const heuristicMatch = this.findHeuristicMatch(devices, deviceInfo, totalLimit);
           if (heuristicMatch) {
-            const updated = await this.touchExistingDevice(tx, heuristicMatch, deviceInfo, now);
+            const updated = await this.touchExistingDevice(tx, heuristicMatch, deviceInfo, now, { preserveFingerprint: true });
             const collapsedDuplicates = await this.collapseDuplicateDevices(tx, updated, devices, totalLimit);
             return {
               success: true,
@@ -422,7 +422,10 @@ export class DeviceService {
     existing: DeviceConfig,
     deviceInfo: DeviceInfo,
     now: Date,
+    options: { preserveFingerprint?: boolean } = {},
   ): Promise<DeviceConfig> {
+    const { preserveFingerprint = false } = options;
+
     const data: Prisma.DeviceConfigUpdateInput = {
       lastSeenAt: now,
       platform: deviceInfo.platform,
@@ -432,7 +435,9 @@ export class DeviceService {
       data.model = deviceInfo.model;
     }
 
-    if (existing.fingerprint !== deviceInfo.fingerprint) {
+    const shouldUpdateFingerprint =
+      !preserveFingerprint && existing.fingerprint !== deviceInfo.fingerprint;
+    if (shouldUpdateFingerprint) {
       data.fingerprint = deviceInfo.fingerprint;
     }
 
@@ -442,7 +447,7 @@ export class DeviceService {
         data,
       });
     } catch (err: any) {
-      if (err?.code === "P2002" && existing.fingerprint !== deviceInfo.fingerprint) {
+      if (err?.code === "P2002" && shouldUpdateFingerprint) {
         return await tx.deviceConfig.update({
           where: { id: existing.id },
           data: {

@@ -307,7 +307,10 @@ test("reuses a weak same-platform slot before the user hits the device limit", a
   assert.equal(second.matchStrategy, "heuristic");
   assert.equal(devices.length, 1);
   assert.equal(devices[0]?.platform, "Windows");
-  assert.equal(devices[0]?.fingerprint, secondInfo.fingerprint);
+  // Heuristic / weak-platform reuse must NOT overwrite the stored fingerprint:
+  // it would lose the identity of the original device and make subsequent exact-match
+  // lookups for it fail, forcing every future reconnect through the heuristic path.
+  assert.equal(devices[0]?.fingerprint, firstInfo.fingerprint);
 });
 
 test("reuses the only same-platform slot at limit 1 when model data is missing", async () => {
@@ -329,7 +332,32 @@ test("reuses the only same-platform slot at limit 1 when model data is missing",
   assert.equal(result.success, true);
   assert.equal(result.matchStrategy, "heuristic");
   assert.equal(devices.length, 1);
-  assert.equal(devices[0]?.fingerprint, driftedInfo.fingerprint);
+  // Heuristic match (limit reached, weak fallback) keeps the originally stored
+  // fingerprint so that the originally registered device still wins exact-match
+  // on its next reconnect.
+  assert.equal(devices[0]?.fingerprint, originalInfo.fingerprint);
+});
+
+test("preserves stored fingerprint when a second weak device borrows the slot via heuristic match", async () => {
+  const { prisma, service, userId } = createService(3);
+  const iphoneA = parseUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 17_2_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1");
+  const iphoneB = parseUserAgent("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15G52 Safari/604.1");
+
+  const first = await service.registerDevice(userId, iphoneA, true);
+  const storedAfterFirst = prisma.listDevices(userId);
+  assert.equal(first.success, true);
+  assert.equal(storedAfterFirst.length, 1);
+  assert.equal(storedAfterFirst[0]?.fingerprint, iphoneA.fingerprint);
+
+  const second = await service.registerDevice(userId, iphoneB, true);
+  const storedAfterSecond = prisma.listDevices(userId);
+  assert.equal(second.success, true);
+  assert.equal(second.matchStrategy, "heuristic");
+  assert.equal(storedAfterSecond.length, 1);
+  // Stored fingerprint must remain the ORIGINAL one (iphoneA), not be overwritten
+  // by the incoming iphoneB. Otherwise iphoneA would lose its identity and could
+  // never win exact-match again on subsequent reconnects.
+  assert.equal(storedAfterSecond[0]?.fingerprint, iphoneA.fingerprint);
 });
 
 test("keeps different weak platforms as separate slots while reusing the existing weak platform slot", async () => {
