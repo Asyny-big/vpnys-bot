@@ -586,24 +586,31 @@ export class PaymentService {
 
         if (!targetDeviceLimit) {
           const computed = await this.prisma.$transaction(async (tx) => {
-            const user = await tx.user.findUnique({ where: { id: payment.userId } });
-            if (!user) throw new Error("User not found");
-            
+            const userRow = await tx.user.findUnique({ where: { id: payment.userId } });
+            if (!userRow) throw new Error("User not found");
+            const subscription = await tx.subscription.findUnique({ where: { userId: payment.userId } });
+            if (!subscription) throw new Error("Subscription not found");
+
             const slots = Math.max(1, Math.floor(payment.deviceSlots || 1));
-            const currentExtra = user.extraDeviceSlots ?? 0;
-            const newExtra = currentExtra + slots;
-            
+            const currentLimit = clampDeviceLimit(subscription.deviceLimit);
+            const newLimit = clampDeviceLimit(Math.min(MAX_DEVICE_LIMIT, currentLimit + slots));
+            const currentExtra = userRow.extraDeviceSlots ?? 0;
+
+            // Keep User.extraDeviceSlots mirrored for future use; Subscription.deviceLimit
+            // remains the source of truth that the rest of the codebase reads.
             await tx.user.update({
               where: { id: payment.userId },
-              data: { extraDeviceSlots: newExtra },
+              data: { extraDeviceSlots: currentExtra + slots },
             });
-            
+
+            // Persist the absolute target so a retried webhook is idempotent
+            // (matches the SUBSCRIPTION flow where targetDeviceLimit is absolute).
             await tx.payment.update({
               where: { id: payment.id },
-              data: { targetDeviceLimit: newExtra },
+              data: { targetDeviceLimit: newLimit },
             });
-            
-            return newExtra;
+
+            return newLimit;
           });
           targetDeviceLimit = computed;
         }
