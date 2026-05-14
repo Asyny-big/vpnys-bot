@@ -1,7 +1,21 @@
 {
-  "DE": {
+  "RU": {
+    "name": "[OpenRay] 🇷🇺 RU-21551",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@176.57.211.166:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%B7%F0%9F%87%BA%20RU-21551",
+    "protocol": "trojan",
+    "bandwidth": 0.02,
+    "ttfb": 0.44421
+  },
+    "DE": {
     "name": "[OpenRay] 🇩🇪 DE-15682",
-    "config": "vless://6202b230-417c-4d8e-b624-0f71afa9c75d@35.156.76.43:8443?allow_insecure=0&host=sni.latonyamadeline.ndjp.net&path=%2F%3Fed%3D2560%26https%3A%2F%2Ft.me%2Fyoutube%40ZYFXS%F0%9F%87%A8%F0%9F%87%B3&security=tls&sni=sni.latonyamadeline.ndjp.net&type=ws#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-15682",
+    "config": "vless://6e42b88a-b78f-Fade-b164-791160cbaef5@s28233.cdn.ngenix.net:443?type=ws&security=tls&fp=qq&sni=s28233.cdn.ngenix.net&host=s28233.cdn.ngenix.net&alpn=h2,http/1.1",
+    "protocol": "vless",
+    "bandwidth": 0.02,
+    "ttfb": 0.44421
+  },
+    "NL": {
+    "name": "[OpenRay] 🇳🇱 NL-15682",
+    "config": "vless://c4d69096-4026-4da5-9485-20a3da91cb14@176.124.214.235:443?type=grpc&security=reality&fp=random&pbk=NhsyjpnYcDfpRfyX2m47AsoHDX_boKi9e1lKOkFNsgE&sid=12a73c72&sni=login.vk.com&mode=gun&serviceName=grpc&authority=#gRPC, VK [V.O.I.D]",
     "protocol": "vless",
     "bandwidth": 0.02,
     "ttfb": 0.44421
