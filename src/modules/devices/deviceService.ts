@@ -79,7 +79,7 @@ export class DeviceService {
 
       return {
         success: false,
-        error: "РџРѕРґРїРёСЃРєР° РёСЃС‚РµРєР»Р°. РџСЂРѕРґР»РёС‚Рµ РїРѕРґРїРёСЃРєСѓ РґР»СЏ РїРѕРґРєР»СЋС‡РµРЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР°.",
+        error: "Подписка истекла. Продлите подписку для подключения устройства.",
         errorCode: "SUBSCRIPTION_EXPIRED",
       };
     }
@@ -147,7 +147,7 @@ export class DeviceService {
 
           return {
             success: false,
-            error: `Р”РѕСЃС‚РёРіРЅСѓС‚ Р»РёРјРёС‚ СѓСЃС‚СЂРѕР№СЃС‚РІ (${totalLimit}). РЈРґР°Р»РёС‚Рµ СЃС‚Р°СЂРѕРµ СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РёР»Рё РєСѓРїРёС‚Рµ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ СЃР»РѕС‚.`,
+            error: `Достигнут лимит устройств (${totalLimit}). Удалите старое устройство или купите дополнительный слот.`,
             errorCode: "LIMIT_REACHED",
             matchStrategy: "limit_reached",
             collapsedDuplicates: 0,
@@ -273,7 +273,7 @@ export class DeviceService {
     if (limits.availableSlots <= 0) {
       return {
         success: false,
-        error: `Р”РѕСЃС‚РёРіРЅСѓС‚ Р»РёРјРёС‚ СѓСЃС‚СЂРѕР№СЃС‚РІ (${limits.totalLimit}). РЈРґР°Р»РёС‚Рµ СЃС‚Р°СЂРѕРµ СѓСЃС‚СЂРѕР№СЃС‚РІРѕ РёР»Рё РєСѓРїРёС‚Рµ РґРѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ СЃР»РѕС‚.`,
+        error: `Достигнут лимит устройств (${limits.totalLimit}). Удалите старое устройство или купите дополнительный слот.`,
         errorCode: "LIMIT_REACHED",
       };
     }
@@ -298,7 +298,7 @@ export class DeviceService {
     } catch {
       return {
         success: false,
-        error: "РћС€РёР±РєР° СЃРѕР·РґР°РЅРёСЏ СѓСЃС‚СЂРѕР№СЃС‚РІР°",
+        error: "Ошибка создания устройства",
         errorCode: "UNKNOWN",
       };
     }
