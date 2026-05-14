@@ -5,6 +5,58 @@
 
 import { createHash } from "node:crypto";
 
+/**
+ * Identity signals observed from Happ-style HTTP headers.
+ *
+ * These headers are a de-facto standard introduced by Happ and adopted by
+ * Remnawave (https://remna.st/docs/features/hwid-device-limit). They are NOT
+ * yet used for matching / fingerprinting — Phase 0 only records them for
+ * telemetry so we can later decide how to evolve the device-identification
+ * logic in a backward-compatible way.
+ *
+ * All fields are nullable: many clients (non-Happ, older Happ, users who
+ * disabled "Send HWID" in app settings) will not provide them.
+ */
+export interface HappIdentityHeaders {
+  /** Raw `X-Hwid` value, trimmed and length-bounded; null if absent/blank. */
+  hwid: string | null;
+  /** Raw `X-Device-Os` value, e.g. "Android", "iOS", "Windows". */
+  deviceOs: string | null;
+  /** Raw `X-Ver-Os` value, e.g. "14", "18.3". */
+  osVersion: string | null;
+  /** Raw `X-Device-Model` value, e.g. "Redmi Note 8 Pro". */
+  deviceModel: string | null;
+  /** Raw `X-Device-Locale` value, e.g. "ru". */
+  deviceLocale: string | null;
+  /** Legacy combined `X-Device-Info` value (Happ Android 1.16.x style). */
+  deviceInfo: string | null;
+  /** True if any of the Happ-style headers was present. */
+  anyPresent: boolean;
+}
+
+/**
+ * Parsed Happ User-Agent string.
+ *
+ * Happ Android (3.x) and iOS (4.x) currently emit User-Agent strings of the
+ * form `Happ/<version>/<platform>/<install_token>`, e.g.
+ *   Happ/3.20.4/Android/17782185961531805698
+ *   Happ/4.9.0/ios/2605051739663
+ *
+ * The trailing `<install_token>` is undocumented but stable across requests
+ * from the same install (empirically). Phase 0 records it for telemetry so
+ * we can later validate stability against `X-Hwid`.
+ */
+export interface HappUserAgentInfo {
+  /** True when UA starts with `Happ/`. */
+  isHapp: boolean;
+  /** Happ app version, e.g. "3.20.4"; null if not parsed. */
+  version: string | null;
+  /** Platform segment from UA, preserved as-is (e.g. "Android", "ios"). */
+  platform: string | null;
+  /** Trailing install/instance token from UA; null if not present. */
+  installToken: string | null;
+}
+
 export interface DeviceInfo {
   platform: "Android" | "iOS" | "Windows" | "macOS" | "Linux" | "Unknown";
   model: string | null;
@@ -345,4 +397,119 @@ export function detectAndLogDevice(
 
   logDeviceInfo(info, context, typeof headers === "object" && headers !== null ? headers : undefined);
   return info;
+}
+
+const HAPP_HEADER_MAX_LEN = 256;
+
+function sanitizeHeaderValue(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (trimmed.length === 0) return null;
+  return trimmed.length > HAPP_HEADER_MAX_LEN
+    ? trimmed.slice(0, HAPP_HEADER_MAX_LEN)
+    : trimmed;
+}
+
+function firstHeader(
+  headers: Record<string, string | string[] | undefined>,
+  ...names: string[]
+): string | null {
+  for (const name of names) {
+    const raw = headers[name];
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    const cleaned = sanitizeHeaderValue(value);
+    if (cleaned !== null) return cleaned;
+  }
+  return null;
+}
+
+/**
+ * Parse Happ-style identity headers from an HTTP request.
+ *
+ * Telemetry-only in Phase 0: the return value is logged but not used for
+ * device matching. Header lookups are case-insensitive (Fastify lowercases
+ * incoming header names, but we also accept the upper-case forms as a
+ * defensive measure for non-Fastify call sites).
+ */
+export function parseHappHeaders(
+  headers: Record<string, string | string[] | undefined> | undefined | null,
+): HappIdentityHeaders {
+  if (!headers) {
+    return {
+      hwid: null,
+      deviceOs: null,
+      osVersion: null,
+      deviceModel: null,
+      deviceLocale: null,
+      deviceInfo: null,
+      anyPresent: false,
+    };
+  }
+
+  const hwid = firstHeader(headers, "x-hwid", "X-Hwid", "X-HWID");
+  const deviceOs = firstHeader(headers, "x-device-os", "X-Device-Os");
+  const osVersion = firstHeader(headers, "x-ver-os", "X-Ver-Os");
+  const deviceModel = firstHeader(headers, "x-device-model", "X-Device-Model");
+  const deviceLocale = firstHeader(headers, "x-device-locale", "X-Device-Locale");
+  const deviceInfo = firstHeader(headers, "x-device-info", "X-Device-Info");
+
+  return {
+    hwid,
+    deviceOs,
+    osVersion,
+    deviceModel,
+    deviceLocale,
+    deviceInfo,
+    anyPresent: !!(hwid || deviceOs || osVersion || deviceModel || deviceLocale || deviceInfo),
+  };
+}
+
+/**
+ * Pattern: `Happ/<version>/<platform>/<install_token>`.
+ *
+ * The install_token is the trailing non-slash segment. We bound the length
+ * defensively in case a future Happ version emits long content there.
+ */
+const HAPP_UA_REGEX = /^Happ\/([^\/\s]+)(?:\/([^\/\s]+))?(?:\/([^\/\s]+))?/i;
+const HAPP_INSTALL_TOKEN_MAX_LEN = 128;
+
+/**
+ * Parse a Happ-style User-Agent string.
+ *
+ * Returns a value safe to log: caller should hash `installToken` before
+ * including it in long-lived storage. This function does NOT change the
+ * existing `parseUserAgent` behavior — it is a parallel parser used only
+ * for telemetry.
+ */
+export function parseHappUserAgent(userAgent: string | undefined | null): HappUserAgentInfo {
+  const ua = (userAgent ?? "").trim();
+  if (!ua || !/^Happ\//i.test(ua)) {
+    return { isHapp: false, version: null, platform: null, installToken: null };
+  }
+
+  const match = ua.match(HAPP_UA_REGEX);
+  if (!match) {
+    return { isHapp: true, version: null, platform: null, installToken: null };
+  }
+
+  const version = match[1] ?? null;
+  const platform = match[2] ?? null;
+  let installToken: string | null = match[3] ?? null;
+  if (installToken !== null && installToken.length > HAPP_INSTALL_TOKEN_MAX_LEN) {
+    installToken = installToken.slice(0, HAPP_INSTALL_TOKEN_MAX_LEN);
+  }
+
+  return { isHapp: true, version, platform, installToken };
+}
+
+/**
+ * Privacy-safe hash for identity tokens we log (HWID, install_token).
+ *
+ * We hash so that production logs never contain raw HWIDs while still being
+ * groupable in aggregations (e.g. "same hashed HWID seen by 2 different
+ * users"). Returns null for null/empty inputs.
+ */
+export function hashIdentityToken(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return createHash("sha256").update(value).digest("hex").slice(0, 16);
 }

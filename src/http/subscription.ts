@@ -6,7 +6,12 @@ import type { SubscriptionService } from "../modules/subscription/subscriptionSe
 import type { DeviceService } from "../modules/devices/deviceService";
 import { buildSubscription } from "../modules/subscription/subscriptionBuilder";
 import { qrSvg } from "./qr";
-import { detectAndLogDevice } from "../utils/deviceDetect";
+import {
+  detectAndLogDevice,
+  hashIdentityToken,
+  parseHappHeaders,
+  parseHappUserAgent,
+} from "../utils/deviceDetect";
 
 const DEFAULT_XUI_CLIENT_FLOW = "xtls-rprx-vision";
 
@@ -1266,6 +1271,34 @@ export async function registerSubscriptionRoutes(
       if (isActive) {
         const deviceInfo = detectAndLogDevice(req.headers as Record<string, string | undefined>, `/sub/${token}`, clientIp);
 
+        // Phase 0 telemetry: observe Happ-style HWID headers and the trailing
+        // install token in the Happ User-Agent. These signals are NOT used
+        // for matching yet — they are logged so we can later decide how to
+        // evolve device identity in a backward-compatible way.
+        // See: lisvpn_device_identification_analysis.md
+        const happHeaders = parseHappHeaders(req.headers as Record<string, string | undefined>);
+        const happUa = parseHappUserAgent(deviceInfo.rawUserAgent);
+        const happIdentity = {
+          isHapp: happUa.isHapp,
+          happVersion: happUa.version,
+          happUaPlatform: happUa.platform,
+          happUaInstallTokenHash: hashIdentityToken(happUa.installToken),
+          hwidPresent: happHeaders.hwid !== null,
+          hwidHash: hashIdentityToken(happHeaders.hwid),
+          deviceOs: happHeaders.deviceOs,
+          osVersion: happHeaders.osVersion,
+          deviceModelHeader: happHeaders.deviceModel,
+          deviceLocale: happHeaders.deviceLocale,
+          deviceInfoHeaderPresent: happHeaders.deviceInfo !== null,
+          headerSchema: happHeaders.hwid !== null
+            ? "happ_v1"
+            : happHeaders.deviceInfo !== null
+              ? "happ_v0"
+              : happUa.isHapp
+                ? "happ_ua_only"
+                : "legacy",
+        };
+
         if (deviceInfo.fingerprint) {
           const registerResult = await deps.devices.registerDevice(row.user.id, deviceInfo, isActive).catch((err) => {
             req.log.error({ err }, "Failed to register device in /sub/:token");
@@ -1286,6 +1319,7 @@ export async function registerSubscriptionRoutes(
             currentDevices: "currentDevices" in registerResult ? registerResult.currentDevices ?? null : null,
             totalLimit: "totalLimit" in registerResult ? registerResult.totalLimit ?? null : null,
             collapsedDuplicates: "collapsedDuplicates" in registerResult ? registerResult.collapsedDuplicates ?? 0 : 0,
+            happIdentity,
           };
 
           if (!registerResult.success && "errorCode" in registerResult && registerResult.errorCode === "LIMIT_REACHED") {
