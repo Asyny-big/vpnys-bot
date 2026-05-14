@@ -1,14 +1,9 @@
 {
-  "NL": {
-    "name": "[🇳🇱] [vl-re-ra] [260507-150008.913]",
-    "config": "vless://530eaa91-28a0-46ae-bc63-57384362ba6b@46.149.78.27:17113?encryption=none&type=raw&headerType=none&security=reality&pbk=516wV7sLhUaSh5zqVbgyo-otX3ii13GgHJngRPhbflg&sni=vk.ru&sid=fe013b8818613e#[🇳🇱] [vl-re-ra] [260507-150008.913]",
-    "bandwidth": 32.86,
-    "ttfb": 0.615588
-  },
   "DE": {
-    "name": "[OpenRay] 🇩🇪 DE-15480",
-    "config": "vless://ae25bb41-dac8-48f0-89a9-f649459ad6ff@195.133.84.136:64003?type=grpc&headerType=none&security=reality&encryption=none&sni=download.docker.com&fp=firefox&pbk=dG1suoqzIlJMu_sHTvWy1RK12ZORBro6NrkqdQ6h7iQ&sid=fbf3edeea8eabbdc&spx=%2Fmac&serviceName=xraygrpc&mode=gun#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-15480",
-    "bandwidth": 22.42,
-    "ttfb": 0.463006
+    "name": "[OpenRay] 🇩🇪 DE-15682",
+    "config": "vless://6202b230-417c-4d8e-b624-0f71afa9c75d@35.156.76.43:8443?allow_insecure=0&host=sni.latonyamadeline.ndjp.net&path=%2F%3Fed%3D2560%26https%3A%2F%2Ft.me%2Fyoutube%40ZYFXS%F0%9F%87%A8%F0%9F%87%B3&security=tls&sni=sni.latonyamadeline.ndjp.net&type=ws#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-15682",
+    "protocol": "vless",
+    "bandwidth": 0.02,
+    "ttfb": 0.44421
   }
 }
