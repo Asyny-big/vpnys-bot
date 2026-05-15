@@ -1,38 +1,41 @@
 {
   "DE": {
-    "name": "[OpenRay] 🇫🇮 FI-1852",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@193.164.155.226:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-1852",
+    "name": "[OpenRay] 🇫🇮 FI-2158",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@45.38.143.139:2053?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-2158",
     "protocol": "trojan",
-    "bandwidth": 26.34,
-    "bandwidth_up": 22.53,
-    "ttfb": 0.51294,
-    "entry_country": "DK",
+    "bandwidth": 28.04,
+    "bandwidth_up": 24.04,
+    "ttfb": 0.44047,
+    "entry_country": "AL",
     "real_country": "DE",
-    "real_ip": "91.107.250.153",
-    "real_colo": "FRA"
+    "real_ip": "87.251.88.57",
+    "real_colo": "FRA",
+    "is_cf_egress": false
+  },
+  "NL": {
+    "name": "[OpenRay] 🇩🇪 DE-14189",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@138.124.93.118:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-14189",
+    "protocol": "trojan",
+    "bandwidth": 23.05,
+    "bandwidth_up": 24.2,
+    "ttfb": 0.30138,
+    "entry_country": "IT",
+    "real_country": "NL",
+    "real_ip": "147.45.45.136",
+    "real_colo": "FRA",
+    "is_cf_egress": false
   },
   "GB": {
-    "name": "[OpenRay] 🇳🇱 NL-4982",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@194.37.81.117:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-4982",
+    "name": "[OpenRay] 🇫🇮 FI-2533",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@95.164.55.75:8443?host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3+%40WangCai2&security=tls&sni=Koma-YT.PAGeS.Dev&type=ws#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-2533",
     "protocol": "trojan",
-    "bandwidth": 45.53,
-    "bandwidth_up": 13.59,
-    "ttfb": 0.4799,
-    "entry_country": "IL",
+    "bandwidth": 38.45,
+    "bandwidth_up": 16.42,
+    "ttfb": 0.52258,
+    "entry_country": "GI",
     "real_country": "GB",
     "real_ip": "2a12:5940:af82::2",
-    "real_colo": "FRA"
-  },
-  "UZ": {
-    "name": "[OpenRay] 🇩🇪 DE-14010",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@185.65.202.101:2053?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-14010",
-    "protocol": "trojan",
-    "bandwidth": 22.41,
-    "bandwidth_up": 0,
-    "ttfb": 0.43829,
-    "entry_country": "UZ",
-    "real_country": null,
-    "real_ip": null,
-    "real_colo": null
+    "real_colo": "FRA",
+    "is_cf_egress": false
   }
 }
