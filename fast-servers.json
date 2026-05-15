@@ -1,23 +1,38 @@
 {
-  "LB": {
-    "name": "[OpenRay] 🇷🇺 RU-21601",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@77.110.104.41:2053?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%B7%F0%9F%87%BA%20RU-21601",
+  "DE": {
+    "name": "[OpenRay] 🇫🇮 FI-1852",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@193.164.155.226:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-1852",
     "protocol": "trojan",
-    "bandwidth": 38.69,
-    "ttfb": 0.47653
+    "bandwidth": 26.34,
+    "bandwidth_up": 22.53,
+    "ttfb": 0.51294,
+    "entry_country": "DK",
+    "real_country": "DE",
+    "real_ip": "91.107.250.153",
+    "real_colo": "FRA"
   },
-  "AL": {
-    "name": "[OpenRay] 🇫🇮 FI-2219",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@45.38.139.214:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-2219",
+  "GB": {
+    "name": "[OpenRay] 🇳🇱 NL-4982",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@194.37.81.117:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%B3%F0%9F%87%B1%20NL-4982",
     "protocol": "trojan",
-    "bandwidth": 35.68,
-    "ttfb": 0.53629
+    "bandwidth": 45.53,
+    "bandwidth_up": 13.59,
+    "ttfb": 0.4799,
+    "entry_country": "IL",
+    "real_country": "GB",
+    "real_ip": "2a12:5940:af82::2",
+    "real_colo": "FRA"
   },
-  "GR": {
-    "name": "@DeltaKroneckerGithub",
-    "config": "trojan://162534@138.124.112.238:2053/?type=ws&host=cchh2.pages.dev&path=%2F%3Fed%3D2560%26https%3A%2F%2Ft.me%2FWangCai2%F0%9F%87%A8%F0%9F%87%B3&security=tls&sni=cchh2.pages.dev&allowInsecure=1&fp=chrome#@DeltaKroneckerGithub",
+  "UZ": {
+    "name": "[OpenRay] 🇩🇪 DE-14010",
+    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@185.65.202.101:2053?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-14010",
     "protocol": "trojan",
-    "bandwidth": 31.83,
-    "ttfb": 0.32062
+    "bandwidth": 22.41,
+    "bandwidth_up": 0,
+    "ttfb": 0.43829,
+    "entry_country": "UZ",
+    "real_country": null,
+    "real_ip": null,
+    "real_colo": null
   }
 }
