@@ -1,41 +1,20 @@
 {
-  "DE": {
-    "name": "[OpenRay] 🇫🇮 FI-2158",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@45.38.143.139:2053?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-2158",
+  "FR": {
+    "name": ">>@v2line::FR",
+    "config": "trojan://humanity@185.18.250.245:443?security=tls&sni=www.calmlunch.com&allowInsecure=1&type=ws&host=www.calmlunch.com&path=%2Fassignment#%3E%3E%40v2line%3A%3AFR",
     "protocol": "trojan",
-    "bandwidth": 28.04,
-    "bandwidth_up": 24.04,
-    "ttfb": 0.44047,
-    "entry_country": "AL",
-    "real_country": "DE",
-    "real_ip": "87.251.88.57",
-    "real_colo": "FRA",
-    "is_cf_egress": false
-  },
-  "NL": {
-    "name": "[OpenRay] 🇩🇪 DE-14189",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@138.124.93.118:8443?security=tls&sni=Koma-YT.PAGeS.Dev&type=ws&host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3%2B%40WangCai2#%5BOpenRay%5D%20%F0%9F%87%A9%F0%9F%87%AA%20DE-14189",
-    "protocol": "trojan",
-    "bandwidth": 23.05,
-    "bandwidth_up": 24.2,
-    "ttfb": 0.30138,
-    "entry_country": "IT",
-    "real_country": "NL",
-    "real_ip": "147.45.45.136",
-    "real_colo": "FRA",
-    "is_cf_egress": false
-  },
-  "GB": {
-    "name": "[OpenRay] 🇫🇮 FI-2533",
-    "config": "trojan://8r%3C%5B9%27l6hAO%238ZQi@95.164.55.75:8443?host=Koma-YT.PAGeS.Dev&path=/trTelegram%F0%9F%87%A8%F0%9F%87%B3+%40WangCai2&security=tls&sni=Koma-YT.PAGeS.Dev&type=ws#%5BOpenRay%5D%20%F0%9F%87%AB%F0%9F%87%AE%20FI-2533",
-    "protocol": "trojan",
-    "bandwidth": 38.45,
-    "bandwidth_up": 16.42,
-    "ttfb": 0.52258,
-    "entry_country": "GI",
-    "real_country": "GB",
-    "real_ip": "2a12:5940:af82::2",
-    "real_colo": "FRA",
-    "is_cf_egress": false
+    "bandwidth": 17.4,
+    "bandwidth_up": 28.78,
+    "ttfb": 0.35366,
+    "entry_country": "CH",
+    "real_country": "FR",
+    "real_ip": "51.15.130.70",
+    "real_colo": "CDG",
+    "real_org": "AS12876 Scaleway SAS",
+    "is_cf_egress": false,
+    "exit_source": "ipinfo.io",
+    "cf_trace_ip": "51.15.130.70",
+    "cf_trace_country": "FR",
+    "cf_trace_mismatch": false
   }
 }
