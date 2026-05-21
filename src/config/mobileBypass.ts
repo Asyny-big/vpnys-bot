@@ -5,6 +5,19 @@ let missingFileWarnPrinted = false;
 let lastWarnSignature = "";
 let lastKnownGoodSnapshot: Readonly<{ filePath: string; entries: ReadonlyArray<string> }> | null = null;
 
+const SUPPORTED_CONFIG_SCHEMES = new Set([
+  "vless",
+  "trojan",
+  "vmess",
+  "ss",
+  "ssr",
+  "hysteria",
+  "hysteria2",
+  "hy2",
+  "tuic",
+  "wireguard",
+]);
+
 function getCandidateFiles(): string[] {
   const envPath = (process.env.MOBILE_BYPASS_FILE ?? "").trim();
   const candidates = [
@@ -32,7 +45,8 @@ function parseMobileBypass(raw: string, filePath: string): string[] {
     const line = originalLine.trim();
     if (!line.length || line.startsWith("#")) continue;
 
-    if (!line.startsWith("vless://")) {
+    const scheme = line.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1]?.toLowerCase();
+    if (!scheme || !SUPPORTED_CONFIG_SCHEMES.has(scheme)) {
       throw new Error(`Invalid mobile bypass line in ${filePath}: ${line.slice(0, 80)}`);
     }
 
