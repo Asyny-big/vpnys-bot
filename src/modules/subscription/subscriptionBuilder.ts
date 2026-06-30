@@ -32,7 +32,7 @@ const TELEGRAM_SERVER_URL =
   "vless://e589d6ff-ac06-4561-b869-b6c9aec1ef38@95.85.243.120:30887?type=tcp&encryption=none&security=reality&pbk=4fdEtNDoEofzP77fuUgQpr8fd_Rhi2ISno_EnViObTc&fp=chrome&sni=ya.ru&sid=f6&spx=%2F&flow=xtls-rprx-vision#doper-x78x116j";
 const PERMANENT_SERVER_DISPLAY_NAME = "🇸🇪 Швеция";
 const PERMANENT_SERVER_URL =
-  "vless://598db781-673a-4d67-9d42-e3952906f690@13.60.73.25:443?encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=&mode=auto&path=%2Fupload&pbk=TOh3lTmgJ7Gzm5KSFCID_sgxQUP2MMSDI2hgKHoaEW4&security=reality&sid=1e2e8f26efa977e7&sni=amazonaws-china.com&spx=%2FinXcM22oaKnIwlT&type=xhttp&x_padding_bytes=100-1000#AWS-4cd2ej5fwh";
+  "vless://598db781-673a-4d67-9d42-e3952906f690@13.60.73.25:443?encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=&mode=auto&path=%2Fupload&pbk=TOh3lTmgJ7Gzm5KSFCID_sgxQUP2MMSDI2hgKHoaEW4&security=reality&sid=5843afb2&sni=1.aws-lbr.amazonaws.com&spx=%2FHs0Idt2gTerWEo5&type=xhttp&x_padding_bytes=100-1000#AWS-4cd2ej5fwh";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
