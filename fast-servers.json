@@ -17,7 +17,7 @@
     "cf_trace_country": "DE",
     "cf_trace_mismatch": false
   },
-  "SE": {
+  "FI": {
     "name": " By EbraSha",
     "config": "vless://0970324b-8c61-4ae7-8c3f-385a6f1e17e4@46.20.106.166:443?encryption=none&security=tls&sni=vpn47.cc.cd&fp=chrome&insecure=0&allowInsecure=0&type=ws&host=vpn47.cc.cd&path=%2F# By EbraSha",
     "protocol": "vless",
