@@ -30,9 +30,9 @@ const PRIMARY_SERVER_DISPLAY_NAME = "🇪🇪 Эстония";
 const TELEGRAM_SERVER_DISPLAY_NAME = "🇪🇪 Эстония Telegram";
 const TELEGRAM_SERVER_URL =
   "vless://e589d6ff-ac06-4561-b869-b6c9aec1ef38@95.85.243.120:30887?type=tcp&encryption=none&security=reality&pbk=4fdEtNDoEofzP77fuUgQpr8fd_Rhi2ISno_EnViObTc&fp=chrome&sni=ya.ru&sid=f6&spx=%2F&flow=xtls-rprx-vision#doper-x78x116j";
-const PERMANENT_SERVER_DISPLAY_NAME = "🇸🇪 Швеция";
+const PERMANENT_SERVER_DISPLAY_NAME = "🇩🇪 Германия";
 const PERMANENT_SERVER_URL =
-  "vless://598db781-673a-4d67-9d42-e3952906f690@13.60.73.25:8443?encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=&mode=auto&path=%2Fupload&pbk=TOh3lTmgJ7Gzm5KSFCID_sgxQUP2MMSDI2hgKHoaEW4&security=reality&sid=7d&sni=amazonaws-china.com&spx=%2FECuIa197jE6aqLD&type=xhttp&x_padding_bytes=100-1000#AWS-4cd2ej5fwh";
+  "vless://c48a8ace-3ec7-46a3-9120-56b5dc83a2b0@185.217.124.118:443?encryption=none&extra=%7B%22mode%22%3A%22auto%22%2C%22xPaddingBytes%22%3A%22100-1000%22%7D&fp=chrome&host=&mode=auto&path=%2FUDbz1CGKeJIX&pbk=q3zaHuxRJetbx_8L8EmKoOZDDLJjMTEVYJKXdzLU4Ww&security=reality&sid=bf5da1a324432cab&sni=dl.google.com&spx=%2F690596838659c3a&support-x25519mlkem768=true&type=xhttp&x_padding_bytes=100-1000#LisVPN-DE-lisvpn-de";
 
 export type BuildSubscriptionUser = Readonly<{
   expiresAt?: Date | null;
